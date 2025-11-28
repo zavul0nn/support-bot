@@ -78,7 +78,7 @@ INVITE_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
 
 GENERIC_TME_PATTERN = re.compile(r"\bt\.me/", re.IGNORECASE)
 URL_PATTERN = re.compile(r"(?:https?://|www\.)", re.IGNORECASE)
-OBF_TME_PATTERN = re.compile(r"t" + SEPARATOR_RE + r"me", re.IGNORECASE)
+OBF_TME_PATTERN = re.compile(r"\bt[\\s._\\-\\/|]*me\\b", re.IGNORECASE)
 OBF_TELEGRAM_PATTERN = re.compile(r"te" + SEPARATOR_RE + r"le" + SEPARATOR_RE + r"gram", re.IGNORECASE)
 
 SERVICE_KEYWORDS = (
