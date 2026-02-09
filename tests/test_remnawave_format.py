@@ -14,6 +14,7 @@ def test_format_user_info_contains_emojis_and_escapes():
         lifetime_traffic_bytes=2 * 1024 ** 3,
         last_connected_node_name="node-1",
         last_connected_at=datetime(2025, 1, 2, tzinfo=timezone.utc),
+        subscription_url="https://example.com/sub",
         internal_squads=["<alpha>", "beta"],
         external_squad="<ext>",
         users_found=2,
@@ -27,5 +28,7 @@ def test_format_user_info_contains_emojis_and_escapes():
     assert "🛰" in text
     assert "🧩" in text
     assert "👥" in text
+    assert "🔗" in text
+    assert "https://example.com/sub" in text
     assert "Вид подписки" in text
     assert "ПЛАТНАЯ" in text or "НИЩЕБРОД" in text or "&lt;alpha&gt;" in text

@@ -25,6 +25,7 @@ class RemnawaveInfo:
     lifetime_traffic_bytes: float
     last_connected_node_name: str | None
     last_connected_at: datetime | None
+    subscription_url: str | None
     internal_squads: list[str]
     external_squad: str | None
     users_found: int = 1
@@ -101,6 +102,7 @@ async def fetch_user_info(config: RemnawaveConfig, telegram_id: int) -> Remnawav
             lifetime_traffic_bytes=user.user_traffic.lifetime_used_traffic_bytes,
             last_connected_node_name=last_node_name,
             last_connected_at=last_connected_at,
+            subscription_url=getattr(user, "subscription_url", None),
             internal_squads=internal_squads,
             external_squad=external_squad_name,
             users_found=users_found,
@@ -137,6 +139,7 @@ def format_user_info(info: RemnawaveInfo, *, title: str) -> str:
         f"🗓 Подписка активна до: {_format_datetime(info.expire_at)}",
         f"📶 Трафик за месяц: {_bytes_to_gb(info.used_traffic_bytes)}",
         f"📶 Трафик за всё время: {_bytes_to_gb(info.lifetime_traffic_bytes)}",
+        f"🔗 Подписная ссылка: {hcode(info.subscription_url) if info.subscription_url else '—'}",
         f"🛰 Нода: {hcode(node)}",
         f"🕒 Последний онлайн: {_format_datetime(info.last_connected_at)}",
         f"🧩 Вид подписки: {subscription_kind}",
