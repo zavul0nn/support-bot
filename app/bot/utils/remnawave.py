@@ -113,12 +113,16 @@ async def fetch_user_info(config: RemnawaveConfig, telegram_id: int) -> Remnawav
 
 
 def format_user_info(info: RemnawaveInfo, *, title: str) -> str:
-    internal_squads = (
-        ", ".join(html.escape(name) for name in info.internal_squads)
-        if info.internal_squads
-        else "—"
-    )
-    external_squad = html.escape(info.external_squad) if info.external_squad else "—"
+    internal_squads = [name.strip() for name in info.internal_squads if name and name.strip()]
+    internal_lower = {name.lower() for name in internal_squads}
+    if any(name == "trial" for name in internal_lower):
+        subscription_kind = "НИЩЕБРОД"
+    elif any(name in {"germany", "white"} for name in internal_lower):
+        subscription_kind = "ПЛАТНАЯ"
+    elif internal_squads:
+        subscription_kind = ", ".join(html.escape(name) for name in internal_squads)
+    else:
+        subscription_kind = "—"
     node = info.last_connected_node_name or "—"
 
     lines = [
@@ -127,12 +131,13 @@ def format_user_info(info: RemnawaveInfo, *, title: str) -> str:
         f"👤 Логин: {hcode(info.username)}",
         f"🆔 Telegram ID: {hcode(info.telegram_id) if info.telegram_id else '—'}",
         f"✅ Статус: {hcode(info.status)}",
-        f"🗓 Подписка: {_format_datetime(info.created_at)} → {_format_datetime(info.expire_at)}",
-        f"📶 Трафик: {_bytes_to_gb(info.used_traffic_bytes)} (lifetime {_bytes_to_gb(info.lifetime_traffic_bytes)})",
+        f"🗓 Первое подключение: {_format_datetime(info.created_at)}",
+        f"🗓 Подписка активна до: {_format_datetime(info.expire_at)}",
+        f"📶 Трафик за месяц: {_bytes_to_gb(info.used_traffic_bytes)}",
+        f"📶 Трафик за всё время: {_bytes_to_gb(info.lifetime_traffic_bytes)}",
         f"🛰 Нода: {hcode(node)}",
         f"🕒 Последний онлайн: {_format_datetime(info.last_connected_at)}",
-        f"🧩 Внутренние сквады: {internal_squads}",
-        f"🧷 Внешний сквад: {external_squad}",
+        f"🧩 Вид подписки: {subscription_kind}",
     ]
 
     if info.users_found > 1:

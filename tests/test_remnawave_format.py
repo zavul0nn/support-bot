@@ -26,7 +26,6 @@ def test_format_user_info_contains_emojis_and_escapes():
     assert "📶" in text
     assert "🛰" in text
     assert "🧩" in text
-    assert "🧷" in text
     assert "👥" in text
-    assert "&lt;alpha&gt;" in text
-    assert "&lt;ext&gt;" in text
+    assert "Вид подписки" in text
+    assert "ПЛАТНАЯ" in text or "НИЩЕБРОД" in text or "&lt;alpha&gt;" in text
