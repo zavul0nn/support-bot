@@ -19,6 +19,7 @@ from app.bot.utils.language import resolve_language_code
 from app.bot.utils.redis import RedisStorage, SettingsStorage
 from app.bot.utils.redis.models import UserData
 from app.bot.utils.reminders import cancel_support_reminder, schedule_support_reminder
+from app.bot.utils.remnawave import fetch_user_info, format_user_info, is_configured
 from app.bot.utils.security import sanitize_display_name
 from app.bot.utils.texts import TextMessage
 
@@ -103,11 +104,19 @@ async def handler(message: Message, manager: Manager, redis: RedisStorage) -> No
     user_data = await redis.get_by_message_thread_id(message.message_thread_id)
     if not user_data: return None  # noqa
 
+    info = await fetch_user_info(manager.config.remnawave, user_data.id)
+    if info:
+        await message.reply(format_user_info(info, title="Remnawave: информация о пользователе"))
+        return
+
     format_data = user_data.to_dict()
     safe_name = sanitize_display_name(format_data["full_name"], placeholder=f"User {user_data.id}")
     format_data["full_name"] = hbold(safe_name)
     text = manager.text_message.get("user_information")
-    # Reply with formatted user information
+    if not is_configured(manager.config.remnawave):
+        text = "Remnawave не настроен. Резервная информация:\n\n" + text
+    else:
+        text = "Пользователь не найден в Remnawave. Резервная информация:\n\n" + text
     await message.reply(text.format_map(format_data))
 
 
@@ -351,10 +360,20 @@ async def panel_callback(
             return
 
     elif action == "info":
+        info = await fetch_user_info(manager.config.remnawave, user_data.id)
+        if info:
+            await call.message.answer(format_user_info(info, title="Remnawave: информация о пользователе"))
+            await call.answer()
+            return
+
         format_data = user_data.to_dict()
         safe_name = sanitize_display_name(format_data["full_name"], placeholder=f"User {user_data.id}")
         format_data["full_name"] = hbold(safe_name)
         text = manager.text_message.get("user_information")
+        if not is_configured(manager.config.remnawave):
+            text = "Remnawave не настроен. Резервная информация:\n\n" + text
+        else:
+            text = "Пользователь не найден в Remnawave. Резервная информация:\n\n" + text
         await call.message.answer(text.format_map(format_data))
         await call.answer()
 

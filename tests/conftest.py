@@ -1,4 +1,4 @@
-﻿import sys
+import sys
 import types
 from pathlib import Path
 
@@ -15,12 +15,17 @@ if "environs" not in sys.modules:
 
         def str(self, _key: str, default: str | None = None) -> str:
             if default is None:
-                raise RuntimeError("Default value required for tests.")
+                return "test"
             return default
 
         def int(self, _key: str, default: int | None = None) -> int:
             if default is None:
-                raise RuntimeError("Default value required for tests.")
+                return 0
+            return default
+
+        def bool(self, _key: str, default: bool | None = None) -> bool:
+            if default is None:
+                return False
             return default
 
     environs_module.Env = _Env

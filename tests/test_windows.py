@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 from types import SimpleNamespace
 
 from app.bot.handlers.private.windows import Window

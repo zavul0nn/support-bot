@@ -116,6 +116,10 @@ docker compose up -d --build
 | `BOT_LANGUAGE_PROMPT_ENABLED` | `true/false`, показывать ли окно выбора языка  |
 | `SECURITY_FILTER_ENABLED` | `true/false`, включает фильтр никнеймов/ссылок t.me/telegram |
 | `SQLITE_PATH` | SQLite database file path (default `./data/support-bot.sqlite3`) |
+| `REMNAWAVE_API_BASE` | Remnawave API base URL (e.g. `https://panel.example/api`) |
+| `REMNAWAVE_API_TOKEN` | Remnawave API token |
+| `REMNAWAVE_CADDY_TOKEN` | Optional X-Api-Key for Caddy auth |
+| `REMNAWAVE_SSL_IGNORE` | `true/false`, ignore SSL verification |
 | `REDIS_HOST`           | адрес Redis                                           |
 | `REDIS_PORT`           | порт Redis                                            |
 | `REDIS_DB`             | номер базы Redis                                      |

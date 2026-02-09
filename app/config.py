@@ -67,6 +67,17 @@ class SQLiteConfig:
 
 
 @dataclass
+class RemnawaveConfig:
+    """
+    Data class representing Remnawave configuration.
+    """
+    API_BASE: str
+    API_TOKEN: str
+    CADDY_TOKEN: str | None
+    SSL_IGNORE: bool
+
+
+@dataclass
 class Config:
     """
     Data class representing the overall configuration for the application.
@@ -81,6 +92,7 @@ class Config:
     sqlite: SQLiteConfig
     redis: RedisConfig | None
     redis_migrate_on_start: bool
+    remnawave: RemnawaveConfig
     security_enabled: bool
 
 
@@ -121,5 +133,11 @@ def load_config() -> Config:
             else None
         ),
         redis_migrate_on_start=env.bool("REDIS_MIGRATE_ON_START", default=True),
+        remnawave=RemnawaveConfig(
+            API_BASE=env.str("REMNAWAVE_API_BASE", default=""),
+            API_TOKEN=env.str("REMNAWAVE_API_TOKEN", default=""),
+            CADDY_TOKEN=env.str("REMNAWAVE_CADDY_TOKEN", default="") or None,
+            SSL_IGNORE=env.bool("REMNAWAVE_SSL_IGNORE", default=False),
+        ),
         security_enabled=env.bool("SECURITY_FILTER_ENABLED", default=True),
     )
