@@ -1,20 +1,23 @@
 import asyncio
 import logging
 import time
+from pathlib import Path
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.fsm.storage.redis import RedisStorage
-from apscheduler.jobstores.redis import RedisJobStore
+from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from .bot import commands
 from .bot.handlers import include_routers
 from .bot.middlewares import register_middlewares
+from .bot.utils.fsm_storage import SQLiteFSMStorage
+from .bot.utils.sqlite import SQLiteDatabase
 from .config import load_config, Config
 from .logger import setup_logger
 from .migrations import run_migrations
+from .migrations.redis_import import migrate_from_redis_if_needed
 
 
 async def on_shutdown(
@@ -22,6 +25,7 @@ async def on_shutdown(
     dispatcher: Dispatcher,
     config: Config,
     bot: Bot,
+    db: SQLiteDatabase,
 ) -> None:
     """
     Shutdown event handler. This runs when the bot shuts down.
@@ -36,6 +40,7 @@ async def on_shutdown(
     # Delete commands and close storage when shutting down
     await commands.delete(bot, config)
     await dispatcher.storage.close()
+    await db.close()
     await bot.delete_webhook()
     await bot.session.close()
 
@@ -68,12 +73,7 @@ async def main() -> None:
     config = load_config()
 
     logger.info("🚀 Запуск support-bot…")
-    logger.info(
-        "⚙️  Redis: %s:%s/%s",
-        config.redis.HOST,
-        config.redis.PORT,
-        config.redis.DB,
-    )
+    logger.info("SQLite: %s", config.sqlite.PATH)
     logger.info("👤 DEV_ID: %s", config.bot.DEV_ID)
     logger.info("🗣️  Язык по умолчанию: %s", config.bot.DEFAULT_LANGUAGE)
     logger.info(
@@ -85,21 +85,22 @@ async def main() -> None:
         "активны" if config.bot.REMINDERS_ENABLED else "отключены",
     )
 
+    # Initialize SQLite database
+    base_dir = Path(__file__).resolve().parent.parent
+    db_path = Path(config.sqlite.PATH)
+    if not db_path.is_absolute():
+        db_path = (base_dir / db_path).resolve()
+    db = SQLiteDatabase(path=db_path)
+    await db.connect()
+
     # Initialize apscheduler
-    job_store = RedisJobStore(
-        host=config.redis.HOST,
-        port=config.redis.PORT,
-        db=config.redis.DB,
-        password=config.redis.PASSWORD,
-    )
+    job_store = SQLAlchemyJobStore(url=f"sqlite:///{db_path.as_posix()}")
     apscheduler = AsyncIOScheduler(
         jobstores={"default": job_store},
     )
 
-    # Initialize Redis storage
-    storage = RedisStorage.from_url(
-        url=config.redis.dsn(),
-    )
+    # Initialize FSM storage
+    storage = SQLiteFSMStorage(db)
 
     # Create Bot and Dispatcher instances
     bot = Bot(
@@ -113,6 +114,7 @@ async def main() -> None:
         storage=storage,
         config=config,
         bot=bot,
+        db=db,
     )
 
     # Register startup handler
@@ -127,14 +129,17 @@ async def main() -> None:
     # Register middlewares
     logger.info("🧱 Регистрируем middleware…")
     register_middlewares(
-        dp, config=config, redis=storage.redis, apscheduler=apscheduler
+        dp, config=config, db=db, apscheduler=apscheduler
     )
     logger.info("✅ Middleware зарегистрированы")
+
+    # Migrate existing data from Redis if needed
+    await migrate_from_redis_if_needed(config=config, db=db)
 
     # Apply pending migrations before starting polling
     logger.info("🧹 Запускаем миграции…")
     migration_started = time.perf_counter()
-    await run_migrations(config=config, bot=bot, redis=storage.redis)
+    await run_migrations(config=config, bot=bot, db=db)
     logger.info(
         "✅ Миграции завершены за %.2f с",
         time.perf_counter() - migration_started,

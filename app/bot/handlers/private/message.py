@@ -265,6 +265,6 @@ async def handle_incoming_message(
             user_id=user_data.id,
             message_thread_id=user_data.message_thread_id,
             language_code=user_data.language_code,
-            redis_dsn=manager.config.redis.dsn(),
+            db_path=manager.config.sqlite.PATH,
         )
 

@@ -5,7 +5,7 @@ from dataclasses import dataclass, asdict, field
 from typing import Any, Iterable
 from uuid import uuid4
 
-from redis.asyncio import Redis
+from app.bot.utils.sqlite import SQLiteDatabase
 
 
 @dataclass
@@ -53,44 +53,36 @@ class FAQItem:
 
 
 class FAQStorage:
-    """Redis-backed storage for frequently asked questions."""
+    """SQLite-backed storage for frequently asked questions."""
 
-    ITEMS_KEY = "faq:items"
-    ORDER_KEY = "faq:order"
-
-    def __init__(self, redis: Redis) -> None:
-        self.redis = redis
+    def __init__(self, db: SQLiteDatabase) -> None:
+        self.db = db
 
     async def list_items(self) -> list[FAQItem]:
         """Return FAQ items in stored order."""
-        async with self.redis.client() as client:
-            raw_ids = await client.lrange(self.ORDER_KEY, 0, -1)
+        async with self.db.conn.execute(
+            "SELECT payload FROM faq_items ORDER BY sort_order",
+        ) as cursor:
+            rows = await cursor.fetchall()
 
-        faq_items: list[FAQItem] = []
-        for raw_id in raw_ids:
-            item_id = raw_id.decode() if isinstance(raw_id, bytes) else raw_id
-            item = await self.get_item(item_id)
-            if item is not None:
-                faq_items.append(item)
-
-        return faq_items
+        return [FAQItem.from_json(row["payload"]) for row in rows]
 
     async def has_items(self) -> bool:
         """Check whether any FAQ entries exist."""
-        async with self.redis.client() as client:
-            length = await client.llen(self.ORDER_KEY)
-        return length > 0
+        async with self.db.conn.execute("SELECT 1 FROM faq_items LIMIT 1") as cursor:
+            row = await cursor.fetchone()
+        return row is not None
 
     async def get_item(self, item_id: str) -> FAQItem | None:
         """Fetch FAQ item by identifier."""
-        async with self.redis.client() as client:
-            payload = await client.hget(self.ITEMS_KEY, item_id)
-
-        if payload is None:
+        async with self.db.conn.execute(
+            "SELECT payload FROM faq_items WHERE id = ?",
+            (item_id,),
+        ) as cursor:
+            row = await cursor.fetchone()
+        if row is None:
             return None
-        if isinstance(payload, bytes):
-            payload = payload.decode()
-        return FAQItem.from_json(payload)
+        return FAQItem.from_json(row["payload"])
 
     async def add_item(
         self,
@@ -105,15 +97,23 @@ class FAQStorage:
             text=text,
             attachments=attachments or [],
         )
-        async with self.redis.client() as client:
-            await client.hset(self.ITEMS_KEY, item.id, item.to_json())
-            await client.rpush(self.ORDER_KEY, item.id)
+        async with self.db.conn.execute("SELECT MAX(sort_order) AS max_order FROM faq_items") as cursor:
+            row = await cursor.fetchone()
+        next_order = 1 if row is None or row["max_order"] is None else int(row["max_order"]) + 1
+        await self.db.conn.execute(
+            "INSERT INTO faq_items (id, payload, sort_order) VALUES (?, ?, ?)",
+            (item.id, item.to_json(), next_order),
+        )
+        await self.db.conn.commit()
         return item
 
     async def update_item(self, item: FAQItem) -> None:
         """Persist changes for an FAQ entry."""
-        async with self.redis.client() as client:
-            await client.hset(self.ITEMS_KEY, item.id, item.to_json())
+        await self.db.conn.execute(
+            "UPDATE faq_items SET payload = ? WHERE id = ?",
+            (item.to_json(), item.id),
+        )
+        await self.db.conn.commit()
 
     async def rename_item(self, item_id: str, title: str) -> FAQItem | None:
         """Rename an existing FAQ entry."""
@@ -142,6 +142,8 @@ class FAQStorage:
 
     async def delete_item(self, item_id: str) -> None:
         """Remove FAQ entry and its order record."""
-        async with self.redis.client() as client:
-            await client.hdel(self.ITEMS_KEY, item_id)
-            await client.lrem(self.ORDER_KEY, 0, item_id)
+        await self.db.conn.execute(
+            "DELETE FROM faq_items WHERE id = ?",
+            (item_id,),
+        )
+        await self.db.conn.commit()

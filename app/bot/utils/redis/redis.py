@@ -1,54 +1,21 @@
-import json
+from __future__ import annotations
 
-from redis.asyncio import Redis
+from typing import Any
 
+from app.bot.utils.sqlite import SQLiteDatabase
 from .models import UserData
 
 
 class RedisStorage:
-    """Class for managing user data storage using Redis."""
+    """Class for managing user data storage using SQLite."""
 
-    NAME = "users"
-
-    def __init__(self, redis: Redis) -> None:
+    def __init__(self, db: SQLiteDatabase) -> None:
         """
         Initializes the RedisStorage instance.
 
-        :param redis: The Redis instance to be used for data storage.
+        :param db: The SQLite database instance to be used for data storage.
         """
-        self.redis = redis
-
-    async def _get(self, name: str, key: str | int) -> bytes | None:
-        """
-        Retrieves data from Redis.
-
-        :param name: The name of the Redis hash.
-        :param key: The key to be retrieved.
-        :return: The retrieved data or None if not found.
-        """
-        async with self.redis.client() as client:
-            return await client.hget(name, key)
-
-    async def _set(self, name: str, key: str | int, value: any) -> None:
-        """
-        Sets data in Redis.
-
-        :param name: The name of the Redis hash.
-        :param key: The key to be set.
-        :param value: The value to be set.
-        """
-        async with self.redis.client() as client:
-            await client.hset(name, key, value)
-
-    async def _update_index(self, message_thread_id: int, user_id: int) -> None:
-        """
-        Updates the user index in Redis.
-
-        :param message_thread_id: The ID of the message thread.
-        :param user_id: The ID of the user to be updated in the index.
-        """
-        index_key = f"{self.NAME}_index_{message_thread_id}"
-        await self._set(index_key, user_id, "1")
+        self.db = db
 
     async def get_by_message_thread_id(self, message_thread_id: int) -> UserData | None:
         """
@@ -57,20 +24,12 @@ class RedisStorage:
         :param message_thread_id: The ID of the message thread.
         :return: The user data or None if not found.
         """
-        user_id = await self._get_user_id_by_message_thread_id(message_thread_id)
-        return None if user_id is None else await self.get_user(user_id)
-
-    async def _get_user_id_by_message_thread_id(self, message_thread_id: int) -> int | None:
-        """
-        Retrieves user ID based on message thread ID.
-
-        :param message_thread_id: The ID of the message thread.
-        :return: The user ID or None if not found.
-        """
-        index_key = f"{self.NAME}_index_{message_thread_id}"
-        async with self.redis.client() as client:
-            user_ids = await client.hkeys(index_key)
-            return int(user_ids[0]) if user_ids else None
+        async with self.db.conn.execute(
+            "SELECT * FROM users WHERE message_thread_id = ? LIMIT 1",
+            (message_thread_id,),
+        ) as cursor:
+            row = await cursor.fetchone()
+        return None if row is None else _row_to_user(row)
 
     async def get_user(self, id_: int) -> UserData | None:
         """
@@ -79,32 +38,85 @@ class RedisStorage:
         :param id_: The ID of the user.
         :return: The user data or None if not found.
         """
-        data = await self._get(self.NAME, id_)
-        if data is not None:
-            decoded_data = json.loads(data)
-            return UserData(**decoded_data)
-        return None
+        async with self.db.conn.execute(
+            "SELECT * FROM users WHERE id = ?",
+            (id_,),
+        ) as cursor:
+            row = await cursor.fetchone()
+        return None if row is None else _row_to_user(row)
 
     async def update_user(self, id_: int, data: UserData) -> None:
         """
-        Updates user data in Redis.
+        Updates user data in SQLite.
 
         :param id_: The ID of the user to be updated.
         :param data: The updated user data.
         """
-        json_data = json.dumps(data.to_dict())
-        await self._set(self.NAME, id_, json_data)
-        await self._update_index(data.message_thread_id, id_)
+        await self.db.conn.execute(
+            """
+            INSERT INTO users (
+                id,
+                message_thread_id,
+                message_silent_id,
+                message_silent_mode,
+                full_name,
+                username,
+                state,
+                is_banned,
+                language_code,
+                ticket_status,
+                awaiting_reply,
+                last_user_message_at,
+                created_at,
+                panel_message_id,
+                operator_replied
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                message_thread_id = excluded.message_thread_id,
+                message_silent_id = excluded.message_silent_id,
+                message_silent_mode = excluded.message_silent_mode,
+                full_name = excluded.full_name,
+                username = excluded.username,
+                state = excluded.state,
+                is_banned = excluded.is_banned,
+                language_code = excluded.language_code,
+                ticket_status = excluded.ticket_status,
+                awaiting_reply = excluded.awaiting_reply,
+                last_user_message_at = excluded.last_user_message_at,
+                created_at = excluded.created_at,
+                panel_message_id = excluded.panel_message_id,
+                operator_replied = excluded.operator_replied
+            """,
+            (
+                data.id,
+                data.message_thread_id,
+                data.message_silent_id,
+                int(bool(data.message_silent_mode)),
+                data.full_name,
+                data.username,
+                data.state,
+                int(bool(data.is_banned)),
+                data.language_code,
+                data.ticket_status,
+                int(bool(data.awaiting_reply)),
+                data.last_user_message_at,
+                data.created_at,
+                data.panel_message_id,
+                int(bool(data.operator_replied)),
+            ),
+        )
+        await self.db.conn.commit()
 
     async def get_all_users_ids(self) -> list[int]:
         """
-        Retrieves all user IDs stored in the Redis hash.
+        Retrieves all user IDs stored in the database.
 
         :return: A list of all user IDs.
         """
-        async with self.redis.client() as client:
-            user_ids = await client.hkeys(self.NAME)
-            return [int(user_id) for user_id in user_ids]
+        async with self.db.conn.execute("SELECT id FROM users") as cursor:
+            rows = await cursor.fetchall()
+        return [int(row["id"]) for row in rows]
     
     async def get_banned_users(self) -> list[UserData]:
         """
@@ -112,12 +124,26 @@ class RedisStorage:
         
         :return: A list of banned UserData objects.
         """
-        all_user_ids = await self.get_all_users_ids()
-        banned_users = []
-        
-        for user_id in all_user_ids:
-            user_data = await self.get_user(user_id)
-            if user_data and user_data.is_banned:
-                banned_users.append(user_data)
-        
-        return banned_users
+        async with self.db.conn.execute("SELECT * FROM users WHERE is_banned = 1") as cursor:
+            rows = await cursor.fetchall()
+        return [_row_to_user(row) for row in rows]
+
+
+def _row_to_user(row: Any) -> UserData:
+    return UserData(
+        message_thread_id=row["message_thread_id"],
+        message_silent_id=row["message_silent_id"],
+        message_silent_mode=bool(row["message_silent_mode"]),
+        id=int(row["id"]),
+        full_name=row["full_name"],
+        username=row["username"],
+        state=row["state"],
+        is_banned=bool(row["is_banned"]),
+        language_code=row["language_code"],
+        ticket_status=row["ticket_status"],
+        awaiting_reply=bool(row["awaiting_reply"]),
+        last_user_message_at=row["last_user_message_at"],
+        created_at=row["created_at"],
+        panel_message_id=row["panel_message_id"],
+        operator_replied=bool(row["operator_replied"]),
+    )

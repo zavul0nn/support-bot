@@ -2,11 +2,11 @@ from typing import Callable, Dict, Any, Awaitable
 
 from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject, User, Chat
-from redis.asyncio import Redis
 
 from app.bot.utils.language import resolve_language_code
 from app.bot.utils.redis import RedisStorage, SettingsStorage, FAQStorage
 from app.bot.utils.redis.models import UserData
+from app.bot.utils.sqlite import SQLiteDatabase
 from app.bot.utils.texts import SUPPORTED_LANGUAGES
 from app.config import Config
 
@@ -16,16 +16,16 @@ class RedisMiddleware(BaseMiddleware):
     Middleware for integrating Redis storage with Aiogram.
 
     Args:
-        redis (Redis): The Redis instance for data storage.
+        db (SQLiteDatabase): The SQLite instance for data storage.
     """
 
-    def __init__(self, redis: Redis, *, config: Config) -> None:
+    def __init__(self, db: SQLiteDatabase, *, config: Config) -> None:
         """
         Initializes the RedisMiddleware instance.
 
-        :param redis: The Redis instance for data storage.
+        :param db: The SQLite database instance for data storage.
         """
-        self.redis = redis
+        self.db = db
         self.config = config
         self.default_language = resolve_language_code(config.bot.DEFAULT_LANGUAGE)
         self.language_prompt_enabled = config.bot.LANGUAGE_PROMPT_ENABLED
@@ -44,10 +44,10 @@ class RedisMiddleware(BaseMiddleware):
         :param data: Additional data.
         :return: The result of the handler function.
         """
-        # Create storage helpers backed by Redis
-        redis = RedisStorage(self.redis)
-        settings = SettingsStorage(self.redis)
-        faq = FAQStorage(self.redis)
+        # Create storage helpers backed by SQLite
+        redis = RedisStorage(self.db)
+        settings = SettingsStorage(self.db)
+        faq = FAQStorage(self.db)
 
         # Extract the chat and user objects from data
         chat: Chat = data.get("event_chat")

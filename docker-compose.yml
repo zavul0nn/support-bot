@@ -8,8 +8,6 @@ services:
     container_name: support-bot
     command: sh -c "cd /usr/src/app && python -m app"
     restart: always
-    depends_on:
-      - redis
     volumes:
       - .:/usr/src/app
     networks:
@@ -17,6 +15,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
+  # Optional: keep Redis running for one-time migration
   redis:
     image: redis:alpine
     container_name: support-redis

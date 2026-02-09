@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from redis.asyncio import Redis
+from app.bot.utils.sqlite import SQLiteDatabase
 
 
 class SettingsStorage:
@@ -10,45 +10,58 @@ class SettingsStorage:
     GREETING_PREFIX = "greeting:"
     RESOLVED_PREFIX = "resolved_message:"
 
-    def __init__(self, redis: Redis) -> None:
-        """Initialize storage with a Redis client."""
-        self.redis = redis
+    def __init__(self, db: SQLiteDatabase) -> None:
+        """Initialize storage with a SQLite database."""
+        self.db = db
 
     async def _collect_prefixed(self, prefix: str) -> dict[str, str]:
         """Return a mapping filtered by a prefix."""
-        async with self.redis.client() as client:
-            raw = await client.hgetall(self.NAME)
+        async with self.db.conn.execute(
+            "SELECT key, value FROM settings WHERE key LIKE ?",
+            (f"{prefix}%",),
+        ) as cursor:
+            rows = await cursor.fetchall()
 
         result: dict[str, str] = {}
-        for key, value in raw.items():
-            decoded_key = key.decode() if isinstance(key, bytes) else key
-            if not decoded_key.startswith(prefix):
+        for row in rows:
+            key = row["key"]
+            if not key.startswith(prefix):
                 continue
-
-            language = decoded_key[len(prefix):]
-            decoded_value = value.decode() if isinstance(value, bytes) else value
-            result[language] = decoded_value
+            language = key[len(prefix):]
+            result[language] = row["value"]
 
         return result
 
     async def _get_prefixed_value(self, prefix: str, language: str) -> str | None:
         """Return a stored value for the language if present."""
-        async with self.redis.client() as client:
-            value = await client.hget(self.NAME, f"{prefix}{language}")
-
-        if value is None:
+        async with self.db.conn.execute(
+            "SELECT value FROM settings WHERE key = ?",
+            (f"{prefix}{language}",),
+        ) as cursor:
+            row = await cursor.fetchone()
+        if row is None:
             return None
-        return value.decode() if isinstance(value, bytes) else value
+        return row["value"]
 
     async def _set_prefixed_value(self, prefix: str, language: str, text: str) -> None:
         """Persist a value for the language."""
-        async with self.redis.client() as client:
-            await client.hset(self.NAME, f"{prefix}{language}", text)
+        await self.db.conn.execute(
+            """
+            INSERT INTO settings (key, value)
+            VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value
+            """,
+            (f"{prefix}{language}", text),
+        )
+        await self.db.conn.commit()
 
     async def _reset_prefixed_value(self, prefix: str, language: str) -> None:
         """Remove a value for the language if it exists."""
-        async with self.redis.client() as client:
-            await client.hdel(self.NAME, f"{prefix}{language}")
+        await self.db.conn.execute(
+            "DELETE FROM settings WHERE key = ?",
+            (f"{prefix}{language}",),
+        )
+        await self.db.conn.commit()
 
     async def get_all_greetings(self) -> dict[str, str]:
         """Return greetings overrides indexed by language."""

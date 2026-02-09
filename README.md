@@ -1,5 +1,11 @@
 # Support Bot
 
+> FSM state is stored in SQLite and persists across restarts. Empty FSM records are cleaned automatically.
+> SQLite file is created on startup if missing; data directory is created automatically.
+> Redis migration runs once on startup when `REDIS_MIGRATE_ON_START=true`, `REDIS_HOST` is set, and SQLite is empty.
+> After successful migration you can remove Redis from docker-compose and unset REDIS_HOST.
+> Данные теперь хранятся в SQLite (файл в каталоге проекта). Redis используется только для разовой миграции.
+
 [![License](https://img.shields.io/github/license/mrtesla07/support-bot)](LICENSE)
 
 [![Telegram Bot](https://img.shields.io/badge/Bot-grey?logo=telegram)](https://core.telegram.org/bots)
@@ -109,6 +115,7 @@ docker compose up -d --build
 | `BOT_DEFAULT_LANGUAGE` | код языка по умолчанию (`en`, `ru`, и т.п.)           |
 | `BOT_LANGUAGE_PROMPT_ENABLED` | `true/false`, показывать ли окно выбора языка  |
 | `SECURITY_FILTER_ENABLED` | `true/false`, включает фильтр никнеймов/ссылок t.me/telegram |
+| `SQLITE_PATH` | SQLite database file path (default `./data/support-bot.sqlite3`) |
 | `REDIS_HOST`           | адрес Redis                                           |
 | `REDIS_PORT`           | порт Redis                                            |
 | `REDIS_DB`             | номер базы Redis                                      |
@@ -235,4 +242,3 @@ python scripts/redis_backup.py restore backups/support-bot-2025-10-20.rdb.gz --d
 ## Лицензия
 
 Проект распространяется по лицензии [MIT](LICENSE).
-

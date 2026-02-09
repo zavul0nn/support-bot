@@ -56,17 +56,31 @@ class RedisConfig:
 
 
 @dataclass
+class SQLiteConfig:
+    """
+    Data class representing the configuration for SQLite.
+
+    Attributes:
+    - PATH (str): Path to SQLite database file.
+    """
+    PATH: str
+
+
+@dataclass
 class Config:
     """
     Data class representing the overall configuration for the application.
 
     Attributes:
     - bot (BotConfig): The bot configuration.
-    - redis (RedisConfig): The Redis configuration.
+    - sqlite (SQLiteConfig): The SQLite configuration.
+    - redis (RedisConfig | None): Optional Redis configuration for migration.
     - security_enabled (bool): Toggles anti-spam security filters.
     """
     bot: BotConfig
-    redis: RedisConfig
+    sqlite: SQLiteConfig
+    redis: RedisConfig | None
+    redis_migrate_on_start: bool
     security_enabled: bool
 
 
@@ -78,6 +92,8 @@ def load_config() -> Config:
     """
     env = Env()
     env.read_env()
+
+    redis_host = env.str("REDIS_HOST", default="")
 
     return Config(
         bot=BotConfig(
@@ -91,11 +107,19 @@ def load_config() -> Config:
             LANGUAGE_PROMPT_ENABLED=env.bool("BOT_LANGUAGE_PROMPT_ENABLED", default=True),
             REMINDERS_ENABLED=env.bool("BOT_REMINDERS_ENABLED", default=True),
         ),
-        redis=RedisConfig(
-            HOST=env.str("REDIS_HOST"),
-            PORT=env.int("REDIS_PORT"),
-            DB=env.int("REDIS_DB"),
-            PASSWORD=env.str("REDIS_PASSWORD", default="") or None,
+        sqlite=SQLiteConfig(
+            PATH=env.str("SQLITE_PATH", default="./data/support-bot.sqlite3"),
         ),
+        redis=(
+            RedisConfig(
+                HOST=redis_host,
+                PORT=env.int("REDIS_PORT", default=6379),
+                DB=env.int("REDIS_DB", default=0),
+                PASSWORD=env.str("REDIS_PASSWORD", default="") or None,
+            )
+            if redis_host
+            else None
+        ),
+        redis_migrate_on_start=env.bool("REDIS_MIGRATE_ON_START", default=True),
         security_enabled=env.bool("SECURITY_FILTER_ENABLED", default=True),
     )

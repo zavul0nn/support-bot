@@ -6,9 +6,9 @@ from dataclasses import dataclass
 from typing import Awaitable, Callable, Iterable
 
 from aiogram import Bot
-from redis.asyncio import Redis
 
 from app.bot.utils.redis import RedisStorage
+from app.bot.utils.sqlite import SQLiteDatabase
 from app.config import Config
 
 from .panel import ensure_operator_replied_flag
@@ -30,7 +30,7 @@ class Migration:
 class MigrationContext:
     config: Config
     bot: Bot
-    redis: Redis
+    db: SQLiteDatabase
     storage: RedisStorage
     throttle_delay: float = 0.05
 
@@ -42,14 +42,14 @@ class MigrationContext:
 class MigrationManager:
     VERSION_KEY = "support_bot:migration_version"
 
-    def __init__(self, *, config: Config, bot: Bot, redis: Redis) -> None:
+    def __init__(self, *, config: Config, bot: Bot, db: SQLiteDatabase) -> None:
         self.config = config
         self.bot = bot
-        self.redis = redis
-        self.storage = RedisStorage(redis)
+        self.db = db
+        self.storage = RedisStorage(db)
 
     async def _get_current_version(self) -> int:
-        value = await self.redis.get(self.VERSION_KEY)
+        value = await self.db.get_meta(self.VERSION_KEY)
         if value is None:
             return 0
         try:
@@ -58,7 +58,7 @@ class MigrationManager:
             return 0
 
     async def _set_current_version(self, version: int) -> None:
-        await self.redis.set(self.VERSION_KEY, version)
+        await self.db.set_meta(self.VERSION_KEY, str(version))
 
     async def run_pending(self) -> None:
         current_version = await self._get_current_version()
@@ -72,7 +72,7 @@ class MigrationManager:
         context = MigrationContext(
             config=self.config,
             bot=self.bot,
-            redis=self.redis,
+            db=self.db,
             storage=self.storage,
         )
 
@@ -87,8 +87,8 @@ class MigrationManager:
         return MIGRATIONS
 
 
-async def run_migrations(*, config: Config, bot: Bot, redis: Redis) -> None:
-    manager = MigrationManager(config=config, bot=bot, redis=redis)
+async def run_migrations(*, config: Config, bot: Bot, db: SQLiteDatabase) -> None:
+    manager = MigrationManager(config=config, bot=bot, db=db)
     await manager.run_pending()
 
 

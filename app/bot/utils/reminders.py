@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
@@ -8,9 +9,9 @@ from aiogram.enums import ParseMode
 from aiogram.utils.markdown import hlink
 from apscheduler.jobstores.base import JobLookupError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from redis.asyncio import Redis as AsyncRedis
 
 from app.bot.utils.redis import RedisStorage
+from app.bot.utils.sqlite import SQLiteDatabase
 from app.bot.utils.security import sanitize_display_name
 from app.bot.utils.texts import TextMessage
 
@@ -29,10 +30,11 @@ async def send_support_reminder(
     user_id: int,
     message_thread_id: int,
     language_code: str | None,
-    redis_dsn: str,
+    db_path: str,
 ) -> None:
-    redis = AsyncRedis.from_url(redis_dsn)
-    storage = RedisStorage(redis)
+    db = SQLiteDatabase(path=Path(db_path))
+    await db.connect()
+    storage = RedisStorage(db)
     try:
         user_data = await storage.get_user(user_id)
         if not user_data or not user_data.awaiting_reply or user_data.ticket_status != "open":
@@ -57,7 +59,7 @@ async def send_support_reminder(
         finally:
             await bot.session.close()
     finally:
-        await redis.close()
+        await db.close()
 
 
 def schedule_support_reminder(
@@ -68,11 +70,12 @@ def schedule_support_reminder(
     user_id: int,
     message_thread_id: int | None,
     language_code: str | None,
-    redis_dsn: str,
+    db_path: str,
 ) -> None:
     if message_thread_id is None:
         return
 
+    resolved_db_path = str(Path(db_path).resolve())
     run_at = datetime.now(timezone.utc) + timedelta(seconds=REMINDER_DELAY_SECONDS)
     scheduler.add_job(
         send_support_reminder,
@@ -86,7 +89,7 @@ def schedule_support_reminder(
             "user_id": user_id,
             "message_thread_id": message_thread_id,
             "language_code": language_code,
-            "redis_dsn": redis_dsn,
+            "db_path": resolved_db_path,
         },
         misfire_grace_time=60,
     )
