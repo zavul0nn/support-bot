@@ -7,3 +7,4 @@ pydantic==2.11.7
 redis==5.0.1
 SQLAlchemy==2.0.36
 remnawave==2.4.4
+setuptools==75.8.2
