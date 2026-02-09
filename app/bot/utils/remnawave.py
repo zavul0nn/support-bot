@@ -117,7 +117,9 @@ def format_user_info(info: RemnawaveInfo, *, title: str) -> str:
     internal_lower = {name.lower() for name in internal_squads}
     if any(name == "trial" for name in internal_lower):
         subscription_kind = "НИЩЕБРОД"
-    elif any(name in {"germany", "white"} for name in internal_lower):
+    elif "germany" in internal_lower and "white" in internal_lower:
+        subscription_kind = "ПЛАТНАЯ + БС"
+    elif "germany" in internal_lower:
         subscription_kind = "ПЛАТНАЯ"
     elif internal_squads:
         subscription_kind = ", ".join(html.escape(name) for name in internal_squads)
