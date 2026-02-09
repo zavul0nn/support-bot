@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import html
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from aiogram.utils.markdown import hbold, hcode
@@ -43,7 +43,10 @@ def _bytes_to_gb(value: float | int | None) -> str:
 def _format_datetime(value: datetime | None) -> str:
     if value is None:
         return "—"
-    return value.strftime("%Y-%m-%d %H:%M:%S")
+    msk = timezone(timedelta(hours=3))
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(msk).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def is_configured(config: RemnawaveConfig) -> bool:
