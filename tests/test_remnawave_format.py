@@ -18,6 +18,8 @@ def test_format_user_info_contains_emojis_and_escapes():
         internal_squads=["<alpha>", "beta"],
         external_squad="<ext>",
         users_found=2,
+        devices_count=1,
+        devices_limit=3,
     )
 
     text = format_user_info(info, title="Remnawave: информация о пользователе")
@@ -29,6 +31,7 @@ def test_format_user_info_contains_emojis_and_escapes():
     assert "🧩" in text
     assert "👥" in text
     assert "🔗" in text
+    assert "📱" in text
     assert "https://example.com/sub" in text
     assert "Вид подписки" in text
     assert "ПЛАТНАЯ" in text or "НИЩЕБРОД" in text or "&lt;alpha&gt;" in text

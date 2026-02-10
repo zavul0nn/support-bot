@@ -29,6 +29,8 @@ class RemnawaveInfo:
     internal_squads: list[str]
     external_squad: str | None
     users_found: int = 1
+    devices_count: int | None = None
+    devices_limit: int | None = None
 
 
 def _bytes_to_gb(value: float | int | None) -> str:
@@ -47,6 +49,20 @@ def _format_datetime(value: datetime | None) -> str:
     if value.tzinfo is None:
         value = value.replace(tzinfo=timezone.utc)
     return value.astimezone(msk).strftime("%Y-%m-%d %H:%M:%S")
+
+
+
+
+def _format_devices(info: RemnawaveInfo) -> str:
+    count = info.devices_count
+    limit = info.devices_limit
+    if count is None and limit is None:
+        return "?"
+    if count is not None and limit is not None:
+        return f"{count}/{limit}"
+    if limit is not None:
+        return str(limit)
+    return str(count)
 
 
 def is_configured(config: RemnawaveConfig) -> bool:
@@ -95,6 +111,16 @@ async def fetch_user_info(config: RemnawaveConfig, telegram_id: int) -> Remnawav
                 if name:
                     internal_squads.append(name)
 
+
+        devices_count: Optional[int] = None
+        devices_limit: Optional[int] = getattr(user, 'hwid_device_limit', None)
+        if getattr(user, 'uuid', None):
+            try:
+                devices = await sdk.hwid.get_hwid_user(str(user.uuid))
+                devices_count = getattr(devices, 'total', None)
+            except Exception as exc:
+                logger.warning("Failed to load HWID devices for %s: %s", user.uuid, exc)
+
         return RemnawaveInfo(
             username=user.username,
             telegram_id=user.telegram_id,
@@ -109,6 +135,8 @@ async def fetch_user_info(config: RemnawaveConfig, telegram_id: int) -> Remnawav
             internal_squads=internal_squads,
             external_squad=external_squad_name,
             users_found=users_found,
+            devices_count=devices_count,
+            devices_limit=devices_limit,
         )
     except Exception as exc:
         logger.exception("Remnawave lookup failed for telegram_id=%s: %s", telegram_id, exc)
@@ -142,6 +170,7 @@ def format_user_info(info: RemnawaveInfo, *, title: str) -> str:
         f"🗓 Подписка активна до: {_format_datetime(info.expire_at)}",
         f"📶 Трафик за месяц: {_bytes_to_gb(info.used_traffic_bytes)}",
         f"📶 Трафик за всё время: {_bytes_to_gb(info.lifetime_traffic_bytes)}",
+        f"📱 Устройства: {_format_devices(info)}",
         f"🔗 Подписная ссылка: {hcode(info.subscription_url) if info.subscription_url else '—'}",
         f"🛰 Нода: {hcode(node)}",
         f"🕒 Последний онлайн: {_format_datetime(info.last_connected_at)}",
