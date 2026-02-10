@@ -8,6 +8,7 @@ def test_format_user_info_contains_emojis_and_escapes():
         username="test_user",
         telegram_id=123,
         status="ACTIVE",
+        user_id=42,
         created_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
         expire_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         used_traffic_bytes=1024 ** 3,
@@ -26,11 +27,13 @@ def test_format_user_info_contains_emojis_and_escapes():
 
     assert "👤" in text
     assert "🆔" in text
+    assert "🔢" in text
     assert "📶" in text
     assert "🛰" in text
     assert "🧩" in text
     assert "👥" in text
     assert "🔗" in text
+    assert "📱" in text
     assert "📱" in text
     assert "https://example.com/sub" in text
     assert "Вид подписки" in text

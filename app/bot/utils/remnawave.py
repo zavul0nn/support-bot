@@ -19,6 +19,7 @@ class RemnawaveInfo:
     username: str
     telegram_id: int | None
     status: str
+    user_id: int | None
     created_at: datetime
     expire_at: datetime
     used_traffic_bytes: float
@@ -29,6 +30,8 @@ class RemnawaveInfo:
     internal_squads: list[str]
     external_squad: str | None
     users_found: int = 1
+    devices_count: int | None = None
+    devices_limit: int | None = None
     devices_count: int | None = None
     devices_limit: int | None = None
 
@@ -49,6 +52,20 @@ def _format_datetime(value: datetime | None) -> str:
     if value.tzinfo is None:
         value = value.replace(tzinfo=timezone.utc)
     return value.astimezone(msk).strftime("%Y-%m-%d %H:%M:%S")
+
+
+
+
+def _format_devices(info: RemnawaveInfo) -> str:
+    count = info.devices_count
+    limit = info.devices_limit
+    if count is None and limit is None:
+        return "?"
+    if count is not None and limit is not None:
+        return f"{count}/{limit}"
+    if limit is not None:
+        return str(limit)
+    return str(count)
 
 
 
@@ -87,6 +104,10 @@ async def fetch_user_info(config: RemnawaveConfig, telegram_id: int) -> Remnawav
         user = users[0]
         users_found = len(users)
 
+        user_id = getattr(user, 'id', None)
+        if user_id is None:
+            user_id = getattr(user, 'user_id', None)
+
         last_node_name: Optional[str] = None
         last_connected_at = user.user_traffic.online_at
         if user.user_traffic.last_connected_node_uuid:
@@ -121,10 +142,21 @@ async def fetch_user_info(config: RemnawaveConfig, telegram_id: int) -> Remnawav
             except Exception as exc:
                 logger.warning("Failed to load HWID devices for %s: %s", user.uuid, exc)
 
+
+        devices_count: Optional[int] = None
+        devices_limit: Optional[int] = getattr(user, 'hwid_device_limit', None)
+        if getattr(user, 'uuid', None):
+            try:
+                devices = await sdk.hwid.get_hwid_user(str(user.uuid))
+                devices_count = getattr(devices, 'total', None)
+            except Exception as exc:
+                logger.warning("Failed to load HWID devices for %s: %s", user.uuid, exc)
+
         return RemnawaveInfo(
             username=user.username,
             telegram_id=user.telegram_id,
             status=str(user.status),
+            user_id=user_id,
             created_at=user.created_at,
             expire_at=user.expire_at,
             used_traffic_bytes=user.user_traffic.used_traffic_bytes,
@@ -164,12 +196,14 @@ def format_user_info(info: RemnawaveInfo, *, title: str) -> str:
         hbold(title),
         "",
         f"👤 Логин: {hcode(info.username)}",
+        f"🔢 ID пользователя: {hcode(info.user_id) if info.user_id else '—'}",
         f"🆔 Telegram ID: {hcode(info.telegram_id) if info.telegram_id else '—'}",
         f"✅ Статус: {hcode(info.status)}",
         f"🗓 Первое подключение: {_format_datetime(info.created_at)}",
         f"🗓 Подписка активна до: {_format_datetime(info.expire_at)}",
         f"📶 Трафик за месяц: {_bytes_to_gb(info.used_traffic_bytes)}",
         f"📶 Трафик за всё время: {_bytes_to_gb(info.lifetime_traffic_bytes)}",
+        f"📱 Устройства: {_format_devices(info)}",
         f"📱 Устройства: {_format_devices(info)}",
         f"🔗 Подписная ссылка: {hcode(info.subscription_url) if info.subscription_url else '—'}",
         f"🛰 Нода: {hcode(node)}",
