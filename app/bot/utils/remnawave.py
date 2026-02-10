@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import logging
 import html
+import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from aiogram.utils.markdown import hbold, hcode
@@ -32,8 +32,7 @@ class RemnawaveInfo:
     users_found: int = 1
     devices_count: int | None = None
     devices_limit: int | None = None
-    devices_count: int | None = None
-    devices_limit: int | None = None
+    devices_names: list[str] | None = None
 
 
 def _bytes_to_gb(value: float | int | None) -> str:
@@ -54,32 +53,25 @@ def _format_datetime(value: datetime | None) -> str:
     return value.astimezone(msk).strftime("%Y-%m-%d %H:%M:%S")
 
 
-
-
 def _format_devices(info: RemnawaveInfo) -> str:
     count = info.devices_count
     limit = info.devices_limit
+    names = info.devices_names or []
     if count is None and limit is None:
-        return "?"
-    if count is not None and limit is not None:
-        return f"{count}/{limit}"
-    if limit is not None:
-        return str(limit)
-    return str(count)
+        base = "—"
+    elif count is not None and limit is not None:
+        base = f"{count}/{limit}"
+    elif limit is not None:
+        base = str(limit)
+    else:
+        base = str(count)
 
-
-
-
-def _format_devices(info: RemnawaveInfo) -> str:
-    count = info.devices_count
-    limit = info.devices_limit
-    if count is None and limit is None:
-        return "?"
-    if count is not None and limit is not None:
-        return f"{count}/{limit}"
-    if limit is not None:
-        return str(limit)
-    return str(count)
+    if not names:
+        return base
+    shown = names[:3]
+    rest = len(names) - len(shown)
+    suffix = f" … +{rest}" if rest > 0 else ""
+    return f"{base} — {', '.join(shown)}{suffix}"
 
 
 def is_configured(config: RemnawaveConfig) -> bool:
@@ -104,9 +96,13 @@ async def fetch_user_info(config: RemnawaveConfig, telegram_id: int) -> Remnawav
         user = users[0]
         users_found = len(users)
 
-        user_id = getattr(user, 'id', None)
+        user_id = getattr(user, "id", None)
         if user_id is None:
-            user_id = getattr(user, 'user_id', None)
+            user_id = getattr(user, "user_id", None)
+        if user_id is None:
+            extra = getattr(user, "__pydantic_extra__", None) or getattr(user, "model_extra", None)
+            if isinstance(extra, dict):
+                user_id = extra.get("id") or extra.get("userId")
 
         last_node_name: Optional[str] = None
         last_connected_at = user.user_traffic.online_at
@@ -132,23 +128,32 @@ async def fetch_user_info(config: RemnawaveConfig, telegram_id: int) -> Remnawav
                 if name:
                     internal_squads.append(name)
 
-
         devices_count: Optional[int] = None
-        devices_limit: Optional[int] = getattr(user, 'hwid_device_limit', None)
-        if getattr(user, 'uuid', None):
+        devices_limit: Optional[int] = getattr(user, "hwid_device_limit", None)
+        devices_names: list[str] = []
+        if getattr(user, "uuid", None):
             try:
                 devices = await sdk.hwid.get_hwid_user(str(user.uuid))
-                devices_count = getattr(devices, 'total', None)
-            except Exception as exc:
-                logger.warning("Failed to load HWID devices for %s: %s", user.uuid, exc)
-
-
-        devices_count: Optional[int] = None
-        devices_limit: Optional[int] = getattr(user, 'hwid_device_limit', None)
-        if getattr(user, 'uuid', None):
-            try:
-                devices = await sdk.hwid.get_hwid_user(str(user.uuid))
-                devices_count = getattr(devices, 'total', None)
+                devices_count = getattr(devices, "total", None)
+                for device in getattr(devices, "devices", []) or []:
+                    parts = []
+                    model = getattr(device, "device_model", None)
+                    platform = getattr(device, "platform", None)
+                    os_version = getattr(device, "os_version", None)
+                    if model:
+                        parts.append(model)
+                    elif platform:
+                        parts.append(platform)
+                    if os_version:
+                        parts.append(os_version)
+                    label = " ".join(parts).strip()
+                    if not label:
+                        label = (
+                            getattr(device, "user_agent", None)
+                            or getattr(device, "hwid", None)
+                            or "Unknown"
+                        )
+                    devices_names.append(html.escape(str(label)))
             except Exception as exc:
                 logger.warning("Failed to load HWID devices for %s: %s", user.uuid, exc)
 
@@ -169,6 +174,7 @@ async def fetch_user_info(config: RemnawaveConfig, telegram_id: int) -> Remnawav
             users_found=users_found,
             devices_count=devices_count,
             devices_limit=devices_limit,
+            devices_names=devices_names,
         )
     except Exception as exc:
         logger.exception("Remnawave lookup failed for telegram_id=%s: %s", telegram_id, exc)
@@ -183,6 +189,8 @@ def format_user_info(info: RemnawaveInfo, *, title: str) -> str:
     if any(name == "trial" for name in internal_lower):
         subscription_kind = "НИЩЕБРОД"
     elif "germany" in internal_lower and "white" in internal_lower:
+        subscription_kind = "ПЛАТНАЯ + БС"
+    elif "white" in internal_lower:
         subscription_kind = "ПЛАТНАЯ + БС"
     elif "germany" in internal_lower:
         subscription_kind = "ПЛАТНАЯ"
@@ -203,7 +211,6 @@ def format_user_info(info: RemnawaveInfo, *, title: str) -> str:
         f"🗓 Подписка активна до: {_format_datetime(info.expire_at)}",
         f"📶 Трафик за месяц: {_bytes_to_gb(info.used_traffic_bytes)}",
         f"📶 Трафик за всё время: {_bytes_to_gb(info.lifetime_traffic_bytes)}",
-        f"📱 Устройства: {_format_devices(info)}",
         f"📱 Устройства: {_format_devices(info)}",
         f"🔗 Подписная ссылка: {hcode(info.subscription_url) if info.subscription_url else '—'}",
         f"🛰 Нода: {hcode(node)}",
