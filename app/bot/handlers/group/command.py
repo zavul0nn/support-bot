@@ -43,42 +43,6 @@ async def handler(message: Message) -> None:
 
 
 
-async def _send_quick_reply(manager: Manager, item: QuickReplyItem, *, user_id: int) -> None:
-    if item.text:
-        await manager.bot.send_message(
-            chat_id=user_id,
-            text=item.text,
-            parse_mode="HTML",
-            disable_web_page_preview=True,
-        )
-
-    for attachment in item.attachments:
-        kwargs = {
-            "chat_id": user_id,
-            "caption": attachment.caption,
-            "parse_mode": "HTML",
-        }
-        if attachment.caption is None:
-            kwargs.pop("caption")
-            kwargs.pop("parse_mode")
-
-        if attachment.type == "photo":
-            await manager.bot.send_photo(photo=attachment.file_id, **kwargs)
-        elif attachment.type == "video":
-            await manager.bot.send_video(video=attachment.file_id, **kwargs)
-        elif attachment.type == "document":
-            await manager.bot.send_document(document=attachment.file_id, **kwargs)
-        elif attachment.type == "animation":
-            await manager.bot.send_animation(animation=attachment.file_id, **kwargs)
-        elif attachment.type == "audio":
-            await manager.bot.send_audio(audio=attachment.file_id, **kwargs)
-        elif attachment.type == "voice":
-            await manager.bot.send_voice(voice=attachment.file_id, **kwargs)
-        elif attachment.type == "video_note":
-            kwargs.pop("caption", None)
-            kwargs.pop("parse_mode", None)
-            await manager.bot.send_video_note(video_note=attachment.file_id, **kwargs)
-
 
 async def _send_quick_reply(
     manager: Manager,
@@ -281,7 +245,6 @@ async def _resolve_ticket(
     redis: RedisStorage,
     apscheduler: AsyncIOScheduler,
     settings: SettingsStorage,
-    quick_replies: QuickReplyStorage,
     *,
     notify_user: bool,
 ) -> None:
@@ -369,6 +332,23 @@ async def handler(message: Message, manager: Manager, redis: RedisStorage, apsch
         settings,
         notify_user=False,
     )
+
+
+@router.message(Command("menu"))
+async def handler(message: Message, manager: Manager, redis: RedisStorage) -> None:
+    user_data = await redis.get_by_message_thread_id(message.message_thread_id)
+    if not user_data:
+        return
+
+    panel_message = await message.reply(
+        panel_text(manager.text_message, user_data),
+        reply_markup=main_keyboard(
+            user_data.id,
+            ticket_status=user_data.ticket_status,
+        ),
+    )
+    user_data.panel_message_id = panel_message.message_id
+    await redis.update_user(user_data.id, user_data)
 
 
 @router.message(Command(commands=["ban"]))
@@ -504,35 +484,16 @@ async def panel_callback(
     elif action == "quick":
         items = await quick_replies.list_items()
         if not items:
-            await call.answer("?????? ??????? ??????? ????.", show_alert=True)
+            await call.answer("Быстрые ответы не заданы.", show_alert=True)
             return
 
         builder = InlineKeyboardBuilder()
         for item in items:
             builder.button(text=item.title, callback_data=f"qr:send:{item.id}")
-        builder.button(text="?? ???????", callback_data="qr:close")
+        builder.button(text="✖ Закрыть", callback_data="qr:close")
         builder.adjust(1)
         await call.message.answer(
-            "???????? ??????? ?????:",
-            reply_markup=builder.as_markup(),
-        )
-        await call.answer()
-        return
-
-
-    elif action == "quick":
-        items = await quick_replies.list_items()
-        if not items:
-            await call.answer("?????? ??????? ??????? ????.", show_alert=True)
-            return
-
-        builder = InlineKeyboardBuilder()
-        for item in items:
-            builder.button(text=item.title, callback_data=f"qr:send:{item.id}")
-        builder.button(text="?? ???????", callback_data="qr:close")
-        builder.adjust(1)
-        await call.message.answer(
-            "???????? ??????? ?????:",
+            "Выберите быстрый ответ:",
             reply_markup=builder.as_markup(),
         )
         await call.answer()
@@ -579,13 +540,13 @@ async def quick_reply_send(
 
     user_data = await redis.get_by_message_thread_id(call.message.message_thread_id)
     if not user_data:
-        await call.answer("???????????? ?? ??????.", show_alert=True)
+        await call.answer("Пользователь не найден.", show_alert=True)
         return
 
     item_id = call.data.split(":", maxsplit=2)[-1]
     item = await quick_replies.get_item(item_id)
     if item is None:
-        await call.answer("????? ?? ??????.", show_alert=True)
+        await call.answer("Ответ не найден.", show_alert=True)
         return
 
     await _send_quick_reply(manager, item, chat_id=user_data.id)
@@ -595,7 +556,7 @@ async def quick_reply_send(
         chat_id=call.message.chat.id,
         message_thread_id=call.message.message_thread_id,
     )
-    msg = await call.message.answer("? ??????? ????? ?????????.")
+    msg = await call.message.answer("✅ Быстрый ответ отправлен.")
     Manager.schedule_message_cleanup(msg)
     await call.answer()
 
