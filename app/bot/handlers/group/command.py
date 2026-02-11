@@ -394,6 +394,10 @@ async def panel_callback(
     settings: SettingsStorage,
     quick_replies: QuickReplyStorage,
 ) -> None:
+    if call.data.startswith("qr:"):
+        await call.answer()
+        return
+
     parts = call.data.split(":")
     action = parts[1]
 
