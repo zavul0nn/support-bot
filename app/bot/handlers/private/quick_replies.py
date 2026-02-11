@@ -12,6 +12,7 @@ from aiogram.utils.markdown import hbold
 
 from app.bot.manager import Manager
 from app.bot.utils.redis import QuickReplyStorage, QuickReplyAttachment, QuickReplyItem
+from app.bot.types.album import Album
 
 
 router = Router(name="quick_replies")
@@ -26,12 +27,28 @@ class QuickReplyStates(StatesGroup):
     editing_content = State()
 
 
-def _collect_attachments(message: Message) -> tuple[str | None, list[QuickReplyAttachment]]:
+def _collect_attachments(
+    message: Message,
+    *,
+    album: Album | None = None,
+) -> tuple[str | None, list[QuickReplyAttachment]]:
     text = message.text or None
     attachments: list[QuickReplyAttachment] = []
 
-    if message.media_group_id:
-        raise ValueError("albums_not_supported")
+    if album is not None:
+        caption = album.caption
+        first = True
+        for media_type in album.media_types:
+            for media in getattr(album, media_type) or []:
+                attachments.append(
+                    QuickReplyAttachment(
+                        type=media_type,
+                        file_id=media.file_id,
+                        caption=caption if first else None,
+                    )
+                )
+                first = False
+        return caption or text, attachments
 
     if message.photo:
         file_id = message.photo[-1].file_id
@@ -167,9 +184,14 @@ async def admin_receive_title(message: Message, manager: Manager) -> None:
 
 
 @router.message(StateFilter(QuickReplyStates.waiting_content))
-async def admin_receive_content(message: Message, manager: Manager, quick_replies: QuickReplyStorage) -> None:
+async def admin_receive_content(
+    message: Message,
+    manager: Manager,
+    quick_replies: QuickReplyStorage,
+    album: Album | None = None,
+) -> None:
     try:
-        text, attachments = _collect_attachments(message)
+        text, attachments = _collect_attachments(message, album=album)
     except ValueError:
         await message.answer("Медиа-альбомы пока не поддерживаются. Отправьте ответ одним сообщением.")
         return
@@ -274,9 +296,14 @@ async def admin_start_update_content(call: CallbackQuery, manager: Manager, quic
 
 
 @router.message(StateFilter(QuickReplyStates.editing_content))
-async def admin_update_content(message: Message, manager: Manager, quick_replies: QuickReplyStorage) -> None:
+async def admin_update_content(
+    message: Message,
+    manager: Manager,
+    quick_replies: QuickReplyStorage,
+    album: Album | None = None,
+) -> None:
     try:
-        text, attachments = _collect_attachments(message)
+        text, attachments = _collect_attachments(message, album=album)
     except ValueError:
         await message.answer("Медиа-альбомы пока не поддерживаются. Отправьте ответ одним сообщением.")
         return
