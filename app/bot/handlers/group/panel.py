@@ -41,7 +41,7 @@ def main_keyboard(user_id: int, *, ticket_status: str) -> InlineKeyboardMarkup:
         text="ℹ️ Инфо",
         callback_data=f"{PANEL_NAMESPACE}:info:{user_id}",
     )
-    builder.adjust(2, 2)
+    builder.adjust(2, 2, 1)
     return builder.as_markup()
 
 

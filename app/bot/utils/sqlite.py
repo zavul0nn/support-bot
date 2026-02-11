@@ -63,6 +63,15 @@ CREATE TABLE IF NOT EXISTS faq_items (
 CREATE INDEX IF NOT EXISTS idx_faq_items_sort_order
     ON faq_items(sort_order);
 
+CREATE TABLE IF NOT EXISTS quick_reply_items (
+    id TEXT PRIMARY KEY,
+    payload TEXT NOT NULL,
+    sort_order INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_quick_reply_items_sort_order
+    ON quick_reply_items(sort_order);
+
 CREATE TABLE IF NOT EXISTS fsm (
     key TEXT PRIMARY KEY,
     state TEXT,

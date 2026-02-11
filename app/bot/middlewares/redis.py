@@ -4,7 +4,7 @@ from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject, User, Chat
 
 from app.bot.utils.language import resolve_language_code
-from app.bot.utils.redis import RedisStorage, SettingsStorage, FAQStorage
+from app.bot.utils.redis import RedisStorage, SettingsStorage, FAQStorage, QuickReplyStorage
 from app.bot.utils.redis.models import UserData
 from app.bot.utils.sqlite import SQLiteDatabase
 from app.bot.utils.texts import SUPPORTED_LANGUAGES
@@ -48,6 +48,7 @@ class RedisMiddleware(BaseMiddleware):
         redis = RedisStorage(self.db)
         settings = SettingsStorage(self.db)
         faq = FAQStorage(self.db)
+        quick_replies = QuickReplyStorage(self.db)
 
         # Extract the chat and user objects from data
         chat: Chat = data.get("event_chat")
@@ -87,6 +88,7 @@ class RedisMiddleware(BaseMiddleware):
         data["settings"] = settings
         data["faq"] = faq
         data["user_data"] = user_data
+        data["quick_replies"] = quick_replies
 
         # Call the handler function with the event and data
         return await handler(event, data)

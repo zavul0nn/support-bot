@@ -5,6 +5,7 @@ from aiogram import F, Router
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.filters import Command, MagicData
 from aiogram.types import CallbackQuery, ForceReply, Message
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiogram.utils.markdown import hcode, hbold
 
@@ -16,7 +17,7 @@ from app.bot.handlers.group.panel import (
     status_keyboard,
 )
 from app.bot.utils.language import resolve_language_code
-from app.bot.utils.redis import RedisStorage, SettingsStorage
+from app.bot.utils.redis import RedisStorage, SettingsStorage, QuickReplyStorage, QuickReplyItem
 from app.bot.utils.redis.models import UserData
 from app.bot.utils.reminders import cancel_support_reminder, schedule_support_reminder
 from app.bot.utils.remnawave import fetch_user_info, format_user_info, is_configured
@@ -40,6 +41,43 @@ async def handler(message: Message) -> None:
     await message.reply(hcode(message.chat.id))
 
 
+
+
+async def _send_quick_reply(manager: Manager, item: QuickReplyItem, *, user_id: int) -> None:
+    if item.text:
+        await manager.bot.send_message(
+            chat_id=user_id,
+            text=item.text,
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+        )
+
+    for attachment in item.attachments:
+        kwargs = {
+            "chat_id": user_id,
+            "caption": attachment.caption,
+            "parse_mode": "HTML",
+        }
+        if attachment.caption is None:
+            kwargs.pop("caption")
+            kwargs.pop("parse_mode")
+
+        if attachment.type == "photo":
+            await manager.bot.send_photo(photo=attachment.file_id, **kwargs)
+        elif attachment.type == "video":
+            await manager.bot.send_video(video=attachment.file_id, **kwargs)
+        elif attachment.type == "document":
+            await manager.bot.send_document(document=attachment.file_id, **kwargs)
+        elif attachment.type == "animation":
+            await manager.bot.send_animation(animation=attachment.file_id, **kwargs)
+        elif attachment.type == "audio":
+            await manager.bot.send_audio(audio=attachment.file_id, **kwargs)
+        elif attachment.type == "voice":
+            await manager.bot.send_voice(voice=attachment.file_id, **kwargs)
+        elif attachment.type == "video_note":
+            kwargs.pop("caption", None)
+            kwargs.pop("parse_mode", None)
+            await manager.bot.send_video_note(video_note=attachment.file_id, **kwargs)
 router = Router()
 router.message.filter(
     F.message_thread_id.is_not(None),
@@ -178,6 +216,7 @@ async def _resolve_ticket(
     redis: RedisStorage,
     apscheduler: AsyncIOScheduler,
     settings: SettingsStorage,
+    quick_replies: QuickReplyStorage,
     *,
     notify_user: bool,
 ) -> None:
@@ -308,6 +347,7 @@ async def panel_callback(
     redis: RedisStorage,
     apscheduler: AsyncIOScheduler,
     settings: SettingsStorage,
+    quick_replies: QuickReplyStorage,
 ) -> None:
     parts = call.data.split(":")
     action = parts[1]
@@ -394,6 +434,25 @@ async def panel_callback(
             await call.answer("Пользователь не найден.", show_alert=True)
             return
 
+
+
+    elif action == "quick":
+        items = await quick_replies.list_items()
+        if not items:
+            await call.answer("?????? ??????? ??????? ????.", show_alert=True)
+            return
+
+        builder = InlineKeyboardBuilder()
+        for item in items:
+            builder.button(text=item.title, callback_data=f"qr:send:{item.id}")
+        builder.button(text="?? ???????", callback_data="qr:close")
+        builder.adjust(1)
+        await call.message.answer(
+            "???????? ??????? ?????:",
+            reply_markup=builder.as_markup(),
+        )
+        await call.answer()
+        return
     elif action == "info":
         info = await fetch_user_info(manager.config.remnawave, user_data.id)
         if info:

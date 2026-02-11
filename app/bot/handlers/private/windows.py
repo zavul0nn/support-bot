@@ -50,6 +50,7 @@ def admin_main_menu_markup(manager: Manager) -> InlineKeyboardBuilder | None:
     builder.button(text="✅ Сообщения закрытия", callback_data="admin:closing")
     builder.button(text="🚫 Забаненные", callback_data="admin:banned")
     builder.button(text="📚 FAQ", callback_data="admin:faq")
+    builder.button(text="⚡ Быстрые ответы", callback_data="admin:quick_replies")
     builder.adjust(2)
     return builder
 
