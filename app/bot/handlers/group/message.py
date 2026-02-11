@@ -84,9 +84,20 @@ async def handler(message: Message, manager: Manager, redis: RedisStorage, apsch
 
     try:
         if not album:
-            await message.copy_to(chat_id=user_data.id)
+            sent_message = await message.copy_to(chat_id=user_data.id)
+            await redis.add_message_link(
+                message.message_id,
+                user_data.id,
+                sent_message.message_id,
+            )
         else:
-            await album.copy_to(chat_id=user_data.id)
+            sent_messages = await album.copy_to(chat_id=user_data.id)
+            for sent in sent_messages:
+                await redis.add_message_link(
+                    message.message_id,
+                    user_data.id,
+                    sent.message_id,
+                )
 
     except TelegramAPIError as ex:
         if "blocked" in ex.message:

@@ -39,6 +39,16 @@ CREATE INDEX IF NOT EXISTS idx_users_message_thread_id
 CREATE INDEX IF NOT EXISTS idx_users_is_banned
     ON users(is_banned);
 
+CREATE TABLE IF NOT EXISTS message_links (
+    thread_message_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    user_message_id INTEGER NOT NULL,
+    PRIMARY KEY(thread_message_id, user_message_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_message_links_thread_id
+    ON message_links(thread_message_id);
+
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL

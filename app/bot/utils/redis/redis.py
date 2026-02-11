@@ -128,6 +128,32 @@ class RedisStorage:
             rows = await cursor.fetchall()
         return [_row_to_user(row) for row in rows]
 
+    async def add_message_link(self, thread_message_id: int, user_id: int, user_message_id: int) -> None:
+        await self.db.conn.execute(
+            """
+            INSERT INTO message_links (thread_message_id, user_id, user_message_id)
+            VALUES (?, ?, ?)
+            ON CONFLICT(thread_message_id, user_message_id) DO NOTHING
+            """,
+            (thread_message_id, user_id, user_message_id),
+        )
+        await self.db.conn.commit()
+
+    async def get_message_links(self, thread_message_id: int) -> list[int]:
+        async with self.db.conn.execute(
+            "SELECT user_message_id FROM message_links WHERE thread_message_id = ?",
+            (thread_message_id,),
+        ) as cursor:
+            rows = await cursor.fetchall()
+        return [int(row["user_message_id"]) for row in rows]
+
+    async def delete_message_links(self, thread_message_id: int) -> None:
+        await self.db.conn.execute(
+            "DELETE FROM message_links WHERE thread_message_id = ?",
+            (thread_message_id,),
+        )
+        await self.db.conn.commit()
+
 
 def _row_to_user(row: Any) -> UserData:
     return UserData(

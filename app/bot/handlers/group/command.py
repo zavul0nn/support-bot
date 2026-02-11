@@ -120,6 +120,41 @@ async def handler(message: Message, manager: Manager, redis: RedisStorage) -> No
     await message.reply(text.format_map(format_data))
 
 
+@router.message(Command("del"))
+async def handler(message: Message, manager: Manager, redis: RedisStorage) -> None:
+    user_data = await redis.get_by_message_thread_id(message.message_thread_id)
+    if not user_data:
+        return
+
+    if not message.reply_to_message:
+        await message.reply("Используй /del ответом на сообщение оператора.")
+        return
+
+    target_message_id = message.reply_to_message.message_id
+    linked_ids = await redis.get_message_links(target_message_id)
+    if not linked_ids:
+        await message.reply("Связанное сообщение у пользователя не найдено.")
+        return
+
+    for user_message_id in linked_ids:
+        with suppress(TelegramBadRequest, TelegramAPIError):
+            await manager.bot.delete_message(
+                chat_id=user_data.id,
+                message_id=user_message_id,
+            )
+
+    with suppress(TelegramBadRequest, TelegramAPIError):
+        await manager.bot.delete_message(
+            chat_id=message.chat.id,
+            message_id=target_message_id,
+        )
+
+    await redis.delete_message_links(target_message_id)
+
+    with suppress(TelegramBadRequest, TelegramAPIError):
+        await message.delete()
+
+
 async def _send_resolution_message(manager: Manager, settings: SettingsStorage, user_data: UserData) -> None:
     language_code = resolve_language_code(user_data.language_code)
     override = await settings.get_resolved_message(language_code)
