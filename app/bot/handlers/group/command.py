@@ -114,6 +114,14 @@ router.message.filter(
     MagicData(F.event_chat.id == F.config.bot.GROUP_ID),  # type: ignore
 )
 
+qr_router = Router()
+qr_router.callback_query.filter(
+    MagicData(F.event_chat.id == F.config.bot.GROUP_ID),  # type: ignore
+    F.message.chat.type.in_(["group", "supergroup"]),
+    F.message.message_thread_id.is_not(None),
+    F.data.startswith("qr:"),
+)
+
 
 @router.message(Command("silent"))
 async def handler(message: Message, manager: Manager, redis: RedisStorage) -> None:
@@ -381,7 +389,7 @@ router.callback_query.filter(
     MagicData(F.event_chat.id == F.config.bot.GROUP_ID),  # type: ignore
     F.message.chat.type.in_(["group", "supergroup"]),
     F.message.message_thread_id.is_not(None),
-    (F.data.startswith(PANEL_NAMESPACE) | F.data.startswith("qr:")),
+    F.data.startswith(PANEL_NAMESPACE),
 )
 
 
@@ -394,10 +402,6 @@ async def panel_callback(
     settings: SettingsStorage,
     quick_replies: QuickReplyStorage,
 ) -> None:
-    if call.data.startswith("qr:"):
-        await call.answer()
-        return
-
     parts = call.data.split(":")
     action = parts[1]
 
@@ -531,7 +535,7 @@ async def panel_callback(
         await redis.update_user(user_id, latest)
 
 
-@router.callback_query(F.data.startswith("qr:send:"))
+@qr_router.callback_query(F.data.startswith("qr:send:"))
 async def quick_reply_send(
     call: CallbackQuery,
     manager: Manager,
@@ -565,7 +569,7 @@ async def quick_reply_send(
     await call.answer()
 
 
-@router.callback_query(F.data == "qr:close")
+@qr_router.callback_query(F.data == "qr:close")
 async def quick_reply_close(call: CallbackQuery) -> None:
     with suppress(TelegramBadRequest):
         await call.message.delete()
