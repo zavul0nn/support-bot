@@ -381,7 +381,7 @@ router.callback_query.filter(
     MagicData(F.event_chat.id == F.config.bot.GROUP_ID),  # type: ignore
     F.message.chat.type.in_(["group", "supergroup"]),
     F.message.message_thread_id.is_not(None),
-    F.data.startswith(PANEL_NAMESPACE),
+    (F.data.startswith(PANEL_NAMESPACE) | F.data.startswith("qr:")),
 )
 
 

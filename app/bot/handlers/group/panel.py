@@ -26,23 +26,23 @@ def panel_text(texts: TextMessage, user_data: UserData) -> str:
 def main_keyboard(user_id: int, *, ticket_status: str) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(
-        text="?? ????????",
+        text="💬 Ответить",
         callback_data=f"{PANEL_NAMESPACE}:reply:{user_id}",
     )
     builder.button(
-        text="? ????????",
+        text="⏳ Отложить",
         callback_data=f"{PANEL_NAMESPACE}:postpone:{user_id}",
     )
     builder.button(
-        text="?? ??????? ??????",
+        text="🔁 Сменить статус",
         callback_data=f"{PANEL_NAMESPACE}:status_menu:{user_id}",
     )
     builder.button(
-        text="?? ????",
+        text="ℹ️ Инфо",
         callback_data=f"{PANEL_NAMESPACE}:info:{user_id}",
     )
     builder.button(
-        text="? ??????? ??????",
+        text="⚡ Быстрые ответы",
         callback_data=f"{PANEL_NAMESPACE}:quick:{user_id}",
     )
     builder.adjust(2, 2, 1)
@@ -53,20 +53,20 @@ def status_keyboard(user_id: int, *, ticket_status: str) -> InlineKeyboardMarkup
     builder = InlineKeyboardBuilder()
     if ticket_status != "open":
         builder.button(
-            text="?? ???????????",
+            text="🔄 Переоткрыть",
             callback_data=f"{PANEL_NAMESPACE}:status:set:{user_id}:open",
         )
     else:
         builder.button(
-            text="? ??????",
+            text="✅ Решить",
             callback_data=f"{PANEL_NAMESPACE}:status:set:{user_id}:resolve",
         )
         builder.button(
-            text="? ?????? ????",
+            text="✅ Решить тихо",
             callback_data=f"{PANEL_NAMESPACE}:status:set:{user_id}:resolvequiet",
         )
     builder.button(
-        text="?? ?????",
+        text="↩️ Назад",
         callback_data=f"{PANEL_NAMESPACE}:status:back:{user_id}",
     )
     builder.adjust(1)
