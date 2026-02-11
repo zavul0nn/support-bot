@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import suppress
 
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.utils.markdown import hbold
 
@@ -26,20 +26,24 @@ def panel_text(texts: TextMessage, user_data: UserData) -> str:
 def main_keyboard(user_id: int, *, ticket_status: str) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(
-        text="💬 Ответить",
+        text="?? ????????",
         callback_data=f"{PANEL_NAMESPACE}:reply:{user_id}",
     )
     builder.button(
-        text="⏳ Отложить",
+        text="? ????????",
         callback_data=f"{PANEL_NAMESPACE}:postpone:{user_id}",
     )
     builder.button(
-        text="🔁 Сменить статус",
+        text="?? ??????? ??????",
         callback_data=f"{PANEL_NAMESPACE}:status_menu:{user_id}",
     )
     builder.button(
-        text="ℹ️ Инфо",
+        text="?? ????",
         callback_data=f"{PANEL_NAMESPACE}:info:{user_id}",
+    )
+    builder.button(
+        text="? ??????? ??????",
+        callback_data=f"{PANEL_NAMESPACE}:quick:{user_id}",
     )
     builder.adjust(2, 2, 1)
     return builder.as_markup()
@@ -49,20 +53,20 @@ def status_keyboard(user_id: int, *, ticket_status: str) -> InlineKeyboardMarkup
     builder = InlineKeyboardBuilder()
     if ticket_status != "open":
         builder.button(
-            text="🔄 Переоткрыть",
+            text="?? ???????????",
             callback_data=f"{PANEL_NAMESPACE}:status:set:{user_id}:open",
         )
     else:
         builder.button(
-            text="✅ Решить",
+            text="? ??????",
             callback_data=f"{PANEL_NAMESPACE}:status:set:{user_id}:resolve",
         )
         builder.button(
-            text="✅ Решить тихо",
+            text="? ?????? ????",
             callback_data=f"{PANEL_NAMESPACE}:status:set:{user_id}:resolvequiet",
         )
     builder.button(
-        text="⬅️ Назад",
+        text="?? ?????",
         callback_data=f"{PANEL_NAMESPACE}:status:back:{user_id}",
     )
     builder.adjust(1)
