@@ -421,3 +421,50 @@ async def panel_callback(
     if latest:
         latest.panel_message_id = call.message.message_id
         await redis.update_user(user_id, latest)
+
+
+@router.callback_query(F.data.startswith("delmsg:"))
+async def delete_linked_message(
+    call: CallbackQuery,
+    manager: Manager,
+    redis: RedisStorage,
+) -> None:
+    if call.message is None or call.message.message_thread_id is None:
+        await call.answer()
+        return
+
+    user_data = await redis.get_by_message_thread_id(call.message.message_thread_id)
+    if not user_data:
+        await call.answer("Пользователь не найден.", show_alert=True)
+        return
+
+    try:
+        target_message_id = int(call.data.split(":", 1)[1])
+    except (ValueError, IndexError):
+        await call.answer("Некорректные данные.", show_alert=True)
+        return
+
+    linked_ids = await redis.get_message_links(target_message_id)
+    if not linked_ids:
+        await call.answer("Связанное сообщение не найдено.", show_alert=True)
+        return
+
+    for user_message_id in linked_ids:
+        with suppress(TelegramBadRequest, TelegramAPIError):
+            await manager.bot.delete_message(
+                chat_id=user_data.id,
+                message_id=user_message_id,
+            )
+
+    with suppress(TelegramBadRequest, TelegramAPIError):
+        await manager.bot.delete_message(
+            chat_id=call.message.chat.id,
+            message_id=target_message_id,
+        )
+
+    await redis.delete_message_links(target_message_id)
+
+    with suppress(TelegramBadRequest, TelegramAPIError):
+        await call.message.delete()
+
+    await call.answer("Удалено")

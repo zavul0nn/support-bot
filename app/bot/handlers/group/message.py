@@ -6,7 +6,7 @@ from aiogram import Router, F
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.filters import MagicData
-from aiogram.types import Message
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from aiogram.utils.markdown import hlink
 
 from app.bot.manager import Manager
@@ -76,6 +76,9 @@ async def handler(message: Message, manager: Manager, redis: RedisStorage, apsch
     user_data = await redis.get_by_message_thread_id(message.message_thread_id)
     if not user_data: return None  # noqa
 
+    if message.text and message.text.strip().startswith("/"):
+        return
+
     if user_data.message_silent_mode:
         # If silent mode is enabled, ignore all messages.
         return
@@ -109,6 +112,14 @@ async def handler(message: Message, manager: Manager, redis: RedisStorage, apsch
     # Reply with a short-lived confirmation
     msg = await message.reply(text)
     Manager.schedule_message_cleanup(msg)
+
+    delete_markup = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🗑", callback_data=f"delmsg:{message.message_id}")]
+        ]
+    )
+    with suppress(TelegramBadRequest, TelegramAPIError):
+        await message.reply("🗑", reply_markup=delete_markup)
 
     if user_data.ticket_status != "resolved" and not user_data.operator_replied:
         with suppress(TelegramBadRequest):
