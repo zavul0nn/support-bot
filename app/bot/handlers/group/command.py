@@ -17,7 +17,7 @@ from app.bot.handlers.group.panel import (
     status_keyboard,
 )
 from app.bot.utils.language import resolve_language_code
-from app.bot.utils.redis import RedisStorage, SettingsStorage, QuickReplyStorage, QuickReplyItem
+from app.bot.utils.redis import RedisStorage, SettingsStorage, QuickReplyStorage, QuickReplyItem, QuickReplyAttachment
 from app.bot.utils.redis.models import UserData
 from app.bot.utils.reminders import cancel_support_reminder, schedule_support_reminder
 from app.bot.utils.remnawave import fetch_user_info, format_user_info, is_configured
@@ -107,6 +107,41 @@ async def _send_quick_reply(
             kwargs.pop("caption", None)
             kwargs.pop("parse_mode", None)
             await manager.bot.send_video_note(video_note=attachment.file_id, **kwargs)
+
+PLACEHOLDER_SUBSCRIPTION_URLS = ("{subscription_url}", "{sub_url}")
+
+
+def _needs_subscription_url(item: QuickReplyItem) -> bool:
+    texts = [item.text or ""] + [attachment.caption or "" for attachment in item.attachments]
+    return any(token in text for token in PLACEHOLDER_SUBSCRIPTION_URLS for text in texts)
+
+
+def _render_quick_reply(item: QuickReplyItem, *, subscription_url: str) -> QuickReplyItem:
+    safe_url = html.escape(subscription_url)
+
+    def replace_tokens(value: str | None) -> str | None:
+        if value is None:
+            return None
+        result = value
+        for token in PLACEHOLDER_SUBSCRIPTION_URLS:
+            result = result.replace(token, safe_url)
+        return result
+
+    attachments = [
+        QuickReplyAttachment(
+            type=attachment.type,
+            file_id=attachment.file_id,
+            caption=replace_tokens(attachment.caption),
+        )
+        for attachment in item.attachments
+    ]
+    return QuickReplyItem(
+        id=item.id,
+        title=item.title,
+        text=replace_tokens(item.text),
+        attachments=attachments,
+    )
+
 router = Router()
 router.message.filter(
     F.message_thread_id.is_not(None),
@@ -557,10 +592,22 @@ async def quick_reply_send(
         await call.answer("Ответ не найден.", show_alert=True)
         return
 
-    await _send_quick_reply(manager, item, chat_id=user_data.id)
+    rendered_item = item
+    if _needs_subscription_url(item):
+        if not is_configured(manager.config.remnawave):
+            await call.answer("Remnawave не настроен.", show_alert=True)
+            return
+        info = await fetch_user_info(manager.config.remnawave, user_data.id)
+        subscription_url = info.subscription_url if info else None
+        if not subscription_url:
+            await call.answer("Подписная ссылка не найдена.", show_alert=True)
+            return
+        rendered_item = _render_quick_reply(item, subscription_url=subscription_url)
+
+    await _send_quick_reply(manager, rendered_item, chat_id=user_data.id)
     await _send_quick_reply(
         manager,
-        item,
+        rendered_item,
         chat_id=call.message.chat.id,
         message_thread_id=call.message.message_thread_id,
     )
