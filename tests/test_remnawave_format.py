@@ -62,7 +62,12 @@ def test_format_user_info_includes_daily_traffic_stats():
         external_squad=None,
         daily_traffic=DailyTrafficStats(
             date_label="2026-05-13",
-            total_bytes=int(1.5 * 1024 ** 3),
+            total_bytes=(
+                1024 ** 3
+                + 512 * 1024 ** 2
+                + 256 * 1024 ** 2
+                + 128 * 1024 ** 2
+            ),
             top_nodes=[
                 TrafficNodeUsage(
                     name="<de-node>",
@@ -74,6 +79,16 @@ def test_format_user_info_includes_daily_traffic_stats():
                     country_code="NL",
                     total_bytes=512 * 1024 ** 2,
                 ),
+                TrafficNodeUsage(
+                    name="fr-node",
+                    country_code="FR",
+                    total_bytes=256 * 1024 ** 2,
+                ),
+                TrafficNodeUsage(
+                    name="us-node",
+                    country_code="US",
+                    total_bytes=128 * 1024 ** 2,
+                ),
             ],
         ),
     )
@@ -82,9 +97,11 @@ def test_format_user_info_includes_daily_traffic_stats():
 
     assert "Трафик за сегодня" in text
     assert "2026-05-13" in text
-    assert "1.50 GB" in text
+    assert "1.88 GB" in text
     assert "512.00 MB" in text
     assert "&lt;de-node&gt;" in text
+    assert "FR · fr-node" in text
+    assert "US · us-node" in text
 
 
 def test_format_user_info_includes_zero_daily_traffic():

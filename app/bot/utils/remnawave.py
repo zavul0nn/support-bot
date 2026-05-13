@@ -14,7 +14,7 @@ from app.config import RemnawaveConfig
 logger = logging.getLogger(__name__)
 
 MSK = timezone(timedelta(hours=3))
-TOP_DAILY_TRAFFIC_NODES = 3
+DAILY_TRAFFIC_NODES_LIMIT = 1000
 
 
 @dataclass(slots=True)
@@ -122,7 +122,7 @@ def _format_daily_traffic(stats: DailyTrafficStats | None) -> list[str]:
     ]
 
     if stats.top_nodes:
-        lines.append("Топ нод:")
+        lines.append("Ноды:")
         for index, node in enumerate(stats.top_nodes, start=1):
             country = f"{node.country_code} · " if node.country_code else ""
             node_name = hcode(country + node.name)
@@ -164,7 +164,7 @@ def _extract_daily_traffic_stats(stats: object, *, date_label: str) -> DailyTraf
     source_nodes.sort(key=lambda node: _int_or_zero(getattr(node, "total", None)), reverse=True)
 
     top_nodes: list[TrafficNodeUsage] = []
-    for node in source_nodes[:TOP_DAILY_TRAFFIC_NODES]:
+    for node in source_nodes:
         total = _int_or_zero(getattr(node, "total", None))
         if total <= 0:
             continue
@@ -191,7 +191,7 @@ async def _fetch_daily_traffic_stats(sdk: RemnawaveSDK, user_uuid: object) -> Da
     try:
         stats = await sdk.bandwidthstats.get_stats_user_usage(
             str(user_uuid),
-            top_nodes_limit=TOP_DAILY_TRAFFIC_NODES,
+            top_nodes_limit=DAILY_TRAFFIC_NODES_LIMIT,
             start=date_label,
             end=date_label,
         )
