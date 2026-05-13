@@ -26,6 +26,7 @@ class BotConfig:
     DEFAULT_LANGUAGE: str
     LANGUAGE_PROMPT_ENABLED: bool
     REMINDERS_ENABLED: bool
+    PROXY_URL: str | None
 
 
 @dataclass
@@ -118,6 +119,7 @@ def load_config() -> Config:
             DEFAULT_LANGUAGE=env.str("BOT_DEFAULT_LANGUAGE", default="en"),
             LANGUAGE_PROMPT_ENABLED=env.bool("BOT_LANGUAGE_PROMPT_ENABLED", default=True),
             REMINDERS_ENABLED=env.bool("BOT_REMINDERS_ENABLED", default=True),
+            PROXY_URL=env.str("PROXY_URL", default="") or None,
         ),
         sqlite=SQLiteConfig(
             PATH=env.str("SQLITE_PATH", default="./data/support-bot.sqlite3"),

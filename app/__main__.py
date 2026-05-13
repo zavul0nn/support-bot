@@ -4,14 +4,13 @@ import time
 from pathlib import Path
 
 from aiogram import Bot, Dispatcher
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from .bot import commands
 from .bot.handlers import include_routers
 from .bot.middlewares import register_middlewares
+from .bot.utils.bot_factory import create_bot
 from .bot.utils.fsm_storage import SQLiteFSMStorage
 from .bot.utils.sqlite import SQLiteDatabase
 from .config import load_config, Config
@@ -103,12 +102,7 @@ async def main() -> None:
     storage = SQLiteFSMStorage(db)
 
     # Create Bot and Dispatcher instances
-    bot = Bot(
-        token=config.bot.TOKEN,
-        default=DefaultBotProperties(
-            parse_mode=ParseMode.HTML,
-        ),
-    )
+    bot = create_bot(token=config.bot.TOKEN, proxy_url=config.bot.PROXY_URL)
     dp = Dispatcher(
         apscheduler=apscheduler,
         storage=storage,

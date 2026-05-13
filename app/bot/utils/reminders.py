@@ -3,13 +3,11 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from aiogram import Bot
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
 from aiogram.utils.markdown import hlink
 from apscheduler.jobstores.base import JobLookupError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
+from app.bot.utils.bot_factory import create_bot
 from app.bot.utils.redis import RedisStorage
 from app.bot.utils.sqlite import SQLiteDatabase
 from app.bot.utils.security import sanitize_display_name
@@ -31,6 +29,7 @@ async def send_support_reminder(
     message_thread_id: int,
     language_code: str | None,
     db_path: str,
+    proxy_url: str | None = None,
 ) -> None:
     db = SQLiteDatabase(path=Path(db_path))
     await db.connect()
@@ -46,10 +45,7 @@ async def send_support_reminder(
         user_link = hlink(safe_name, f"tg://user?id={user_data.id}")
         text = text_template.format(user=user_link)
 
-        bot = Bot(
-            token=bot_token,
-            default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-        )
+        bot = create_bot(token=bot_token, proxy_url=proxy_url)
         try:
             await bot.send_message(
                 chat_id=group_id,
@@ -71,6 +67,7 @@ def schedule_support_reminder(
     message_thread_id: int | None,
     language_code: str | None,
     db_path: str,
+    proxy_url: str | None = None,
 ) -> None:
     if message_thread_id is None:
         return
@@ -90,6 +87,7 @@ def schedule_support_reminder(
             "message_thread_id": message_thread_id,
             "language_code": language_code,
             "db_path": resolved_db_path,
+            "proxy_url": proxy_url,
         },
         misfire_grace_time=60,
     )

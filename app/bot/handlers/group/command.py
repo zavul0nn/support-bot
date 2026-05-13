@@ -475,6 +475,7 @@ async def panel_callback(
             message_thread_id=user_data.message_thread_id,
             language_code=user_data.language_code,
             db_path=manager.config.sqlite.PATH,
+            proxy_url=manager.config.bot.PROXY_URL,
         )
         await call.answer(manager.text_message.get("support_panel_postponed"))
 

@@ -107,6 +107,7 @@ docker compose up -d --build
 | `BOT_RESOLVED_EMOJI_ID`| эмодзи для решённых тикетов                           |
 | `BOT_DEFAULT_LANGUAGE` | код языка по умолчанию (`en`, `ru`, и т.п.)           |
 | `BOT_LANGUAGE_PROMPT_ENABLED` | `true/false`, показывать ли окно выбора языка  |
+| `PROXY_URL`            | прокси для Telegram API, например `socks5://host:port` |
 | `SECURITY_FILTER_ENABLED` | `true/false`, включает фильтр никнеймов/ссылок t.me/telegram |
 | `REDIS_HOST`           | адрес Redis                                           |
 | `REDIS_PORT`           | порт Redis                                            |
