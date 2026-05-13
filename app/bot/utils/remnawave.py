@@ -13,6 +13,23 @@ from app.config import RemnawaveConfig
 
 logger = logging.getLogger(__name__)
 
+MSK = timezone(timedelta(hours=3))
+TOP_DAILY_TRAFFIC_NODES = 3
+
+
+@dataclass(slots=True)
+class TrafficNodeUsage:
+    name: str
+    total_bytes: int
+    country_code: str | None = None
+
+
+@dataclass(slots=True)
+class DailyTrafficStats:
+    date_label: str
+    total_bytes: int
+    top_nodes: list[TrafficNodeUsage]
+
 
 @dataclass(slots=True)
 class RemnawaveInfo:
@@ -33,6 +50,7 @@ class RemnawaveInfo:
     devices_count: int | None = None
     devices_limit: int | None = None
     devices_names: list[str] | None = None
+    daily_traffic: DailyTrafficStats | None = None
 
 
 def _bytes_to_gb(value: float | int | None) -> str:
@@ -44,13 +62,31 @@ def _bytes_to_gb(value: float | int | None) -> str:
         return "—"
 
 
+def _bytes_to_human(value: float | int | None) -> str:
+    if value is None:
+        return "—"
+    try:
+        size = float(value)
+    except Exception:
+        return "—"
+
+    units = ("B", "KB", "MB", "GB", "TB")
+    unit_index = 0
+    while abs(size) >= 1024 and unit_index < len(units) - 1:
+        size /= 1024
+        unit_index += 1
+
+    if unit_index == 0:
+        return f"{int(size)} {units[unit_index]}"
+    return f"{size:.2f} {units[unit_index]}"
+
+
 def _format_datetime(value: datetime | None) -> str:
     if value is None:
         return "—"
-    msk = timezone(timedelta(hours=3))
     if value.tzinfo is None:
         value = value.replace(tzinfo=timezone.utc)
-    return value.astimezone(msk).strftime("%Y-%m-%d %H:%M:%S")
+    return value.astimezone(MSK).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _format_devices(info: RemnawaveInfo) -> str:
@@ -74,8 +110,96 @@ def _format_devices(info: RemnawaveInfo) -> str:
     return f"{base} — {', '.join(shown)}{suffix}"
 
 
+def _format_daily_traffic(stats: DailyTrafficStats | None) -> list[str]:
+    if stats is None:
+        return []
+
+    lines = [
+        "",
+        hbold("📈 Трафик за сегодня"),
+        f"🗓 День: {hcode(stats.date_label)} (МСК)",
+        f"Σ Всего: {hcode(_bytes_to_human(stats.total_bytes))}",
+    ]
+
+    if stats.top_nodes:
+        lines.append("Топ нод:")
+        for index, node in enumerate(stats.top_nodes, start=1):
+            country = f"{node.country_code} · " if node.country_code else ""
+            node_name = hcode(country + node.name)
+            traffic = hcode(_bytes_to_human(node.total_bytes))
+            lines.append(
+                f"{index}. {node_name}: {traffic}"
+            )
+
+    return lines
+
+
 def is_configured(config: RemnawaveConfig) -> bool:
     return bool(config.API_BASE and config.API_TOKEN)
+
+
+def _int_or_zero(value: object) -> int:
+    try:
+        return int(value or 0)
+    except Exception:
+        return 0
+
+
+def _extract_daily_traffic_stats(stats: object, *, date_label: str) -> DailyTrafficStats | None:
+    data = getattr(stats, "response", None) or getattr(stats, "root", None)
+    if data is None:
+        data = stats
+
+    sparkline_data = getattr(data, "sparkline_data", None) or []
+    top_nodes_raw = getattr(data, "top_nodes", None) or []
+    series_raw = getattr(data, "series", None) or []
+
+    total_bytes = sum(_int_or_zero(value) for value in sparkline_data)
+    if total_bytes <= 0:
+        total_bytes = sum(_int_or_zero(getattr(node, "total", None)) for node in top_nodes_raw)
+    if total_bytes <= 0:
+        total_bytes = sum(_int_or_zero(getattr(node, "total", None)) for node in series_raw)
+
+    source_nodes = list(top_nodes_raw or series_raw)
+    source_nodes.sort(key=lambda node: _int_or_zero(getattr(node, "total", None)), reverse=True)
+
+    top_nodes: list[TrafficNodeUsage] = []
+    for node in source_nodes[:TOP_DAILY_TRAFFIC_NODES]:
+        total = _int_or_zero(getattr(node, "total", None))
+        if total <= 0:
+            continue
+        name = str(getattr(node, "name", None) or "Unknown")
+        country_code = getattr(node, "country_code", None)
+        top_nodes.append(
+            TrafficNodeUsage(
+                name=name,
+                country_code=str(country_code).upper() if country_code else None,
+                total_bytes=total,
+            )
+        )
+
+    return DailyTrafficStats(
+        date_label=date_label,
+        total_bytes=total_bytes,
+        top_nodes=top_nodes,
+    )
+
+
+async def _fetch_daily_traffic_stats(sdk: RemnawaveSDK, user_uuid: object) -> DailyTrafficStats | None:
+    today = datetime.now(MSK).date()
+    date_label = today.isoformat()
+    try:
+        stats = await sdk.bandwidthstats.get_stats_user_usage(
+            str(user_uuid),
+            top_nodes_limit=TOP_DAILY_TRAFFIC_NODES,
+            start=date_label,
+            end=date_label,
+        )
+    except Exception as exc:
+        logger.warning("Failed to load daily traffic stats for %s: %s", user_uuid, exc)
+        return None
+
+    return _extract_daily_traffic_stats(stats, date_label=date_label)
 
 
 async def fetch_user_info(config: RemnawaveConfig, telegram_id: int) -> RemnawaveInfo | None:
@@ -157,6 +281,10 @@ async def fetch_user_info(config: RemnawaveConfig, telegram_id: int) -> Remnawav
             except Exception as exc:
                 logger.warning("Failed to load HWID devices for %s: %s", user.uuid, exc)
 
+        daily_traffic = None
+        if getattr(user, "uuid", None):
+            daily_traffic = await _fetch_daily_traffic_stats(sdk, user.uuid)
+
         return RemnawaveInfo(
             username=user.username,
             telegram_id=user.telegram_id,
@@ -175,6 +303,7 @@ async def fetch_user_info(config: RemnawaveConfig, telegram_id: int) -> Remnawav
             devices_count=devices_count,
             devices_limit=devices_limit,
             devices_names=devices_names,
+            daily_traffic=daily_traffic,
         )
     except Exception as exc:
         logger.exception("Remnawave lookup failed for telegram_id=%s: %s", telegram_id, exc)
@@ -220,5 +349,7 @@ def format_user_info(info: RemnawaveInfo, *, title: str) -> str:
 
     if info.users_found > 1:
         lines.append(f"👥 Найдено пользователей по Telegram ID: {info.users_found}")
+
+    lines.extend(_format_daily_traffic(info.daily_traffic))
 
     return "\n".join(lines)
