@@ -11,6 +11,7 @@ from .bot import commands
 from .bot.handlers import include_routers
 from .bot.middlewares import register_middlewares
 from .bot.utils.bot_factory import create_bot
+from .bot.utils.business_hours import MOSCOW_TZ
 from .bot.utils.fsm_storage import SQLiteFSMStorage
 from .bot.utils.sqlite import SQLiteDatabase
 from .config import load_config, Config
@@ -96,6 +97,7 @@ async def main() -> None:
     job_store = SQLAlchemyJobStore(url=f"sqlite:///{db_path.as_posix()}")
     apscheduler = AsyncIOScheduler(
         jobstores={"default": job_store},
+        timezone=MOSCOW_TZ,
     )
 
     # Initialize FSM storage

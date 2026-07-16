@@ -20,7 +20,8 @@ from app.bot.utils.create_forum_topic import (
     get_or_create_forum_topic,
 )
 from app.bot.handlers.group.panel import panel_text, main_keyboard
-from app.bot.utils.redis import RedisStorage, FAQStorage
+from app.bot.utils.business_hours import MOSCOW_TZ, is_within_business_hours
+from app.bot.utils.redis import RedisStorage, FAQStorage, SettingsStorage
 from app.bot.utils.redis.models import UserData
 from app.bot.utils.reminders import schedule_support_reminder
 from app.bot.utils.security import (
@@ -48,6 +49,36 @@ router.message.filter(F.chat.type == "private", StateFilter(None))
 logger = logging.getLogger(__name__)
 
 
+def entities_contain_links(msg: Message) -> bool:
+    for container in (msg.entities or [], msg.caption_entities or []):
+        for entity in container:
+            if entity.type in {"url", "text_link"}:
+                return True
+    return False
+
+
+def _was_previous_user_message_outside_hours(
+    user_data: UserData,
+    *,
+    hours_start,
+    hours_end,
+) -> bool:
+    if user_data.last_user_message_at is None:
+        return False
+
+    try:
+        previous_message_at = datetime.fromisoformat(user_data.last_user_message_at)
+    except ValueError:
+        return False
+
+    return not is_within_business_hours(
+        previous_message_at,
+        start=hours_start,
+        end=hours_end,
+        tz=MOSCOW_TZ,
+    )
+
+
 @router.edited_message()
 async def handle_edited_message(message: Message, manager: Manager) -> None:
     """
@@ -73,6 +104,7 @@ async def handle_incoming_message(
         user_data: UserData,
         apscheduler: AsyncIOScheduler,
         faq: FAQStorage,
+        settings: SettingsStorage,
         album: Album | None = None,
 ) -> None:
     """
@@ -91,13 +123,6 @@ async def handle_incoming_message(
         return
 
     text_content = message.text or message.caption or ""
-
-    def entities_contain_links(msg: Message) -> bool:
-        for container in (msg.entities or [], msg.caption_entities or []):
-            for entity in container:
-                if entity.type in {"url", "text_link"}:
-                    return True
-        return False
 
     if manager.config.security_enabled:
         suspicion = analyze_user_message(
@@ -211,12 +236,34 @@ async def handle_incoming_message(
         user_data.last_user_message_at is None
         or ticket_was_resolved
     )
+    outside_hours_notice_text: str | None = None
+    hours = await settings.get_business_hours()
+    if hours.enabled and not is_within_business_hours(
+        datetime.now(MOSCOW_TZ),
+        start=hours.start,
+        end=hours.end,
+        tz=MOSCOW_TZ,
+    ):
+        previous_was_outside = _was_previous_user_message_outside_hours(
+            user_data,
+            hours_start=hours.start,
+            hours_end=hours.end,
+        )
+        if should_send_confirmation or not previous_was_outside:
+            language_code = manager.text_message.language_code
+            outside_hours_notice_text = (
+                await settings.get_business_hours_message(language_code)
+                or manager.text_message.get("outside_business_hours")
+            )
 
     if should_send_confirmation:
         # Уведомляем пользователя только на старте диалога или после повторного открытия тикета
         text = manager.text_message.get("message_sent")
         msg = await message.reply(text)
         Manager.schedule_message_cleanup(msg)
+
+        if outside_hours_notice_text:
+            await manager.send_message(outside_hours_notice_text, replace_previous=False)
 
         if await faq.has_items():
             suggestion_text = manager.text_message.get("faq_suggestion")
@@ -228,6 +275,8 @@ async def handle_incoming_message(
                 reply_markup=builder.as_markup(),
                 disable_web_page_preview=True,
             )
+    elif outside_hours_notice_text:
+        await manager.send_message(outside_hours_notice_text, replace_previous=False)
 
     normalized = re.sub(r'[\W_]+', ' ', text_content.lower()).strip()
     if user_data.ticket_status == "resolved" and normalized in GRATITUDE_PHRASES:

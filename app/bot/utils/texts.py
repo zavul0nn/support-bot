@@ -34,6 +34,10 @@ class TextMessage(Text):
                 "change_language": "<b>Select language:</b>",
                 "main_menu": "<b>Write your question</b>, and we will answer you as soon as possible:",
                 "message_sent": "<b>Message sent!</b> Expect a response.",
+                "outside_business_hours": (
+                    "<b>Support working hours are 09:00-00:00 Moscow time.</b>\n"
+                    "Outside these hours an operator may reply with a significant delay."
+                ),
                 "faq_suggestion": (
                     "While you wait for a response, take a look at the frequently asked questions "
                     "— the answer might already be there."
@@ -120,6 +124,10 @@ class TextMessage(Text):
                 "change_language": "<b>Выберите язык:</b>",
                 "main_menu": "<b>Напишите свой вопрос</b>, и мы ответим как можно быстрее:",
                 "message_sent": "<b>Сообщение отправлено!</b> Ожидайте ответа.",
+                "outside_business_hours": (
+                    "<b>Время работы поддержки: 09:00-00:00 по Москве.</b>\n"
+                    "В другое время ответ оператора может последовать с существенной задержкой."
+                ),
                 "faq_suggestion": (
                     "Пока вы ждёте ответа, загляните в раздел часто задаваемых вопросов — возможно, решение уже есть."
                 ),
